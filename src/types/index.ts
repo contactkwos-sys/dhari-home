@@ -10,12 +10,13 @@ export type Platform =
 
 export type PaymentStatus = 'Prepaid' | 'COD Pending' | 'COD Received'
 export type MovementType = 'IN' | 'OUT'
+export type DnoSize = '5ft x 4ft' | '7ft x 4ft'
+export type AppRole = 'Owner' | 'Warehouse'
 
 export interface DnoMaster {
   id: string
   dno_number: string
   photo_url: string | null
-  size: string
   manufacturer: Manufacturer
   other_manufacturer_name: string | null
   purchase_rate: number | null
@@ -23,6 +24,7 @@ export interface DnoMaster {
   hsn_code: string | null
   gst_rate: number
   date_added: string
+  low_stock_threshold: number
 }
 
 export interface StockMovement {
@@ -32,7 +34,8 @@ export interface StockMovement {
   qty: number
   date: string
   note: string | null
-  dno_master?: Pick<DnoMaster, 'dno_number' | 'size'> | null
+  size: DnoSize
+  dno_master?: Pick<DnoMaster, 'dno_number'> | null
 }
 
 export interface Order {
@@ -49,17 +52,26 @@ export interface Order {
   awb_number: string | null
   payment_status: PaymentStatus
   invoice_no: string | null
+  size: DnoSize
   dno_master?: Pick<
     DnoMaster,
-    'dno_number' | 'size' | 'hsn_code' | 'gst_rate' | 'category'
+    'dno_number' | 'hsn_code' | 'gst_rate' | 'category'
   > | null
 }
 
 export interface StockRow {
   dno: DnoMaster
+  size: DnoSize
   inbound: number
   outbound: number
   balance: number
+}
+
+export interface LowStockItem {
+  dno: DnoMaster
+  size: DnoSize
+  balance: number
+  threshold: number
 }
 
 export const PLATFORMS: Platform[] = [
@@ -77,7 +89,9 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
   'COD Received',
 ]
 
-export const SIZES = ['5ft x 4ft', '7ft x 4ft'] as const
+export const SIZES: DnoSize[] = ['5ft x 4ft', '7ft x 4ft']
+
+export const APP_ROLES: AppRole[] = ['Owner', 'Warehouse']
 
 export const INDIAN_STATES = [
   'Andhra Pradesh',
@@ -117,3 +131,17 @@ export const INDIAN_STATES = [
   'Lakshadweep',
   'Puducherry',
 ]
+
+/** Extract a readable message from Supabase / thrown values. */
+export function errorMessage(
+  error: unknown,
+  fallback = 'Something went wrong',
+): string {
+  if (error instanceof Error && error.message) return error.message
+  if (error && typeof error === 'object' && 'message' in error) {
+    const msg = (error as { message?: unknown }).message
+    if (typeof msg === 'string' && msg) return msg
+  }
+  if (typeof error === 'string' && error) return error
+  return fallback
+}

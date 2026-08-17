@@ -1,16 +1,17 @@
 import { Link } from 'react-router-dom'
 import { StripeBar } from '../components/StripeBar'
+import { useLowStock } from '../lib/lowStock'
 
 const tiles = [
   {
     to: '/dno',
     title: 'DNO Master',
-    copy: 'Photos, sizes & rates for each design.',
+    copy: 'Photos, categories & rates for each design.',
   },
   {
     to: '/stock',
     title: 'Warehouse',
-    copy: 'In / Out ledger with live balances.',
+    copy: 'Balances per DNO + size with live ledger.',
   },
   {
     to: '/orders',
@@ -25,23 +26,13 @@ const tiles = [
 ]
 
 export function HomePage() {
+  const { items } = useLowStock()
+
   return (
     <div className="page">
-      <section className="relative overflow-hidden rounded-2xl bg-indigo px-5 pb-6 pt-8 text-ivory">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{
-            background:
-              'radial-gradient(circle at 85% 15%, rgba(201,138,44,0.55), transparent 40%), linear-gradient(160deg, transparent 40%, rgba(0,0,0,0.18))',
-          }}
-        />
-        <p
-          className="relative font-display text-4xl font-semibold tracking-tight animate-[fade-soft_500ms_ease-out]"
-          style={{ animationDelay: '40ms' }}
-        >
-          DHARI Home
-        </p>
-        <p className="relative mt-2 max-w-[16rem] text-sm leading-relaxed text-ivory/85">
+      <section className="hero-panel">
+        <p className="hero-brand">DHARI Home</p>
+        <p className="hero-copy">
           Inventory & dispatch for home textiles across marketplaces.
         </p>
         <div className="relative mt-5">
@@ -51,29 +42,62 @@ export function HomePage() {
           <Link to="/orders" className="btn btn-accent text-sm">
             New order
           </Link>
-          <Link
-            to="/stock"
-            className="btn text-sm text-ivory"
-            style={{ background: 'rgba(255,255,255,0.12)' }}
-          >
+          <Link to="/stock" className="btn btn-on-dark text-sm">
             Check stock
           </Link>
         </div>
       </section>
+
+      {items.length > 0 ? (
+        <section className="panel panel-accent mt-5 animate-[rise-in_360ms_ease-out]">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold text-indigo">
+              Low Stock
+            </h2>
+            <span className="badge-alert">{items.length}</span>
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            At or below threshold — restock soon.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {items.map((item) => (
+              <li
+                key={`${item.dno.id}-${item.size}`}
+                className="flex items-center justify-between gap-2 rounded-lg bg-ivory-dark/50 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="num font-medium text-indigo">
+                    {item.dno.dno_number}
+                  </p>
+                  <p className="truncate text-xs text-muted">{item.size}</p>
+                </div>
+                <span
+                  className={[
+                    'badge-stock',
+                    item.balance <= 0 ? 'badge-stock-critical' : 'badge-stock-warn',
+                  ].join(' ')}
+                >
+                  {item.balance} / {item.threshold}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="mt-6 space-y-3">
         {tiles.map((tile, i) => (
           <Link
             key={tile.to}
             to={tile.to}
-            className="block animate-[rise-in_360ms_ease-out_both] rounded-xl border border-[rgba(31,59,87,0.1)] bg-white/50 px-4 py-3.5 transition hover:bg-white/80"
+            className="panel panel-accent block animate-[rise-in_360ms_ease-out_both] transition hover:bg-white"
             style={{ animationDelay: `${80 + i * 60}ms` }}
           >
             <div className="flex items-baseline justify-between gap-2">
               <h2 className="font-display text-lg font-semibold text-indigo">
                 {tile.title}
               </h2>
-              <span className="text-turmeric text-sm">Open →</span>
+              <span className="text-sm text-turmeric">Open →</span>
             </div>
             <p className="mt-1 text-sm text-muted">{tile.copy}</p>
           </Link>

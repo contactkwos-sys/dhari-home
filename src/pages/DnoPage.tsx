@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { StripeBar } from '../components/StripeBar'
 import {
   createDno,
   fetchDnos,
@@ -10,7 +11,7 @@ import {
   formatMoney,
 } from '../lib/api'
 import type { DnoMaster, Manufacturer } from '../types'
-import { SIZES } from '../types'
+import { errorMessage } from '../types'
 
 export function DnoPage() {
   const [rows, setRows] = useState<DnoMaster[]>([])
@@ -18,6 +19,7 @@ export function DnoPage() {
   const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<DnoMaster | null>(null)
+  const [detail, setDetail] = useState<DnoMaster | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -25,9 +27,13 @@ export function DnoPage() {
     setLoading(true)
     setError(null)
     try {
-      setRows(await fetchDnos())
+      const data = await fetchDnos()
+      setRows(data)
+      if (detail) {
+        setDetail(data.find((d) => d.id === detail.id) ?? null)
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load DNOs')
+      setError(errorMessage(e, 'Failed to load DNOs'))
     } finally {
       setLoading(false)
     }
@@ -35,6 +41,7 @@ export function DnoPage() {
 
   useEffect(() => {
     void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function onPhotoPick(dno: DnoMaster, file: File | undefined) {
@@ -46,11 +53,43 @@ export function DnoPage() {
       setRows((prev) =>
         prev.map((r) => (r.id === dno.id ? { ...r, photo_url: url } : r)),
       )
+      setDetail((prev) =>
+        prev && prev.id === dno.id ? { ...prev, photo_url: url } : prev,
+      )
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      setError(errorMessage(e, 'Upload failed'))
     } finally {
       setUploadingId(null)
     }
+  }
+
+  if (detail && !showAdd && !editing) {
+    return (
+      <DnoDetail
+        dno={detail}
+        uploading={uploadingId === detail.id}
+        onBack={() => setDetail(null)}
+        onEdit={() => {
+          setEditing(detail)
+          setShowAdd(false)
+        }}
+        onPhoto={() => fileRefs.current[detail.id]?.click()}
+        fileInput={
+          <input
+            ref={(el) => {
+              fileRefs.current[detail.id] = el
+            }}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void onPhotoPick(detail, e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+        }
+      />
+    )
   }
 
   return (
@@ -65,6 +104,7 @@ export function DnoPage() {
             onClick={() => {
               setShowAdd(true)
               setEditing(null)
+              setDetail(null)
             }}
           >
             Add DNO
@@ -92,81 +132,158 @@ export function DnoPage() {
 
       <ul className="mt-2 space-y-3">
         {rows.map((dno) => (
-          <li key={dno.id} className="panel flex gap-3">
+          <li key={dno.id}>
             <button
               type="button"
-              className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark"
-              onClick={() => fileRefs.current[dno.id]?.click()}
-              aria-label={`Upload photo for ${dno.dno_number}`}
+              className="panel panel-accent flex w-full gap-3 text-left"
+              onClick={() => setDetail(dno)}
             >
-              {dno.photo_url ? (
-                <img
-                  src={dno.photo_url}
-                  alt={dno.dno_number}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center px-1 text-center text-[0.65rem] text-muted">
-                  Camera / Gallery
-                </span>
-              )}
-              {uploadingId === dno.id ? (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-white">
-                  …
-                </span>
-              ) : null}
-            </button>
-            <input
-              ref={(el) => {
-                fileRefs.current[dno.id] = el
-              }}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                void onPhotoPick(dno, e.target.files?.[0])
-                e.target.value = ''
-              }}
-            />
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="num font-medium text-indigo">{dno.dno_number}</p>
-                <button
-                  type="button"
-                  className="text-xs font-medium text-turmeric"
-                  onClick={() => {
-                    setEditing(dno)
-                    setShowAdd(false)
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-              <p className="mt-0.5 text-sm text-ink">{dno.size}</p>
-              <p className="truncate text-xs text-muted">
-                {dno.manufacturer === 'Other'
-                  ? dno.other_manufacturer_name || 'Other'
-                  : dno.manufacturer}
-              </p>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
-                <span>
-                  Rate{' '}
-                  <span className="num text-ink">
-                    {formatMoney(dno.purchase_rate)}
+              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">
+                {dno.photo_url ? (
+                  <img
+                    src={dno.photo_url}
+                    alt={dno.dno_number}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center px-1 text-center text-[0.65rem] text-muted">
+                    No photo
                   </span>
-                </span>
-                <span>
-                  GST <span className="num text-ink">{dno.gst_rate}%</span>
-                </span>
-                <span>
-                  HSN <span className="num text-ink">{dno.hsn_code || '—'}</span>
-                </span>
+                )}
               </div>
-            </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="num font-medium text-indigo">{dno.dno_number}</p>
+                  <span className="text-xs font-medium text-turmeric">View</span>
+                </div>
+                <p className="mt-0.5 truncate text-sm text-muted">
+                  {dno.manufacturer === 'Other'
+                    ? dno.other_manufacturer_name || 'Other'
+                    : dno.manufacturer}
+                </p>
+                {dno.category ? (
+                  <p className="text-xs text-ink">{dno.category}</p>
+                ) : null}
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
+                  <span>
+                    Rate{' '}
+                    <span className="num text-ink">
+                      {formatMoney(dno.purchase_rate)}
+                    </span>
+                  </span>
+                  <span>
+                    Alert{' '}
+                    <span className="num text-ink">
+                      ≤{dno.low_stock_threshold ?? 10}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </button>
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+function DnoDetail({
+  dno,
+  uploading,
+  onBack,
+  onEdit,
+  onPhoto,
+  fileInput,
+}: {
+  dno: DnoMaster
+  uploading: boolean
+  onBack: () => void
+  onEdit: () => void
+  onPhoto: () => void
+  fileInput: ReactNode
+}) {
+  return (
+    <div className="page animate-[rise-in_280ms_ease-out]">
+      <div className="mb-3 flex items-center justify-between">
+        <button type="button" className="btn btn-ghost text-sm" onClick={onBack}>
+          ← Back
+        </button>
+        <button type="button" className="btn btn-primary text-sm" onClick={onEdit}>
+          Edit
+        </button>
+      </div>
+
+      <article className="panel panel-accent overflow-hidden !p-0">
+        <button
+          type="button"
+          className="relative block w-full bg-ivory-dark"
+          onClick={onPhoto}
+          aria-label={`Upload photo for ${dno.dno_number}`}
+        >
+          {dno.photo_url ? (
+            <img
+              src={dno.photo_url}
+              alt={dno.dno_number}
+              className="aspect-[4/3] w-full object-cover"
+            />
+          ) : (
+            <div className="flex aspect-[4/3] w-full items-center justify-center text-sm text-muted">
+              Tap to add photo
+            </div>
+          )}
+          {uploading ? (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white">
+              Uploading…
+            </span>
+          ) : null}
+        </button>
+        {fileInput}
+
+        <div className="space-y-4 px-4 py-4">
+          <div>
+            <p className="num text-sm tracking-wide text-turmeric">
+              {dno.dno_number}
+            </p>
+            <h1 className="font-display text-2xl font-semibold text-indigo">
+              {dno.category || 'Uncategorized'}
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              {dno.manufacturer === 'Other'
+                ? dno.other_manufacturer_name || 'Other'
+                : dno.manufacturer}
+            </p>
+          </div>
+
+          <StripeBar />
+
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <DetailField label="Purchase rate" value={formatMoney(dno.purchase_rate)} />
+            <DetailField label="GST" value={`${dno.gst_rate}%`} />
+            <DetailField label="HSN" value={dno.hsn_code || '—'} />
+            <DetailField
+              label="Low stock alert"
+              value={`≤ ${dno.low_stock_threshold ?? 10}`}
+            />
+            <DetailField label="Date added" value={dno.date_added} />
+            <DetailField
+              label="Sizes"
+              value="Set in Stock (5ft / 7ft)"
+            />
+          </dl>
+        </div>
+      </article>
+    </div>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[0.65rem] uppercase tracking-wide text-muted">
+        {label}
+      </dt>
+      <dd className="num mt-0.5 font-medium text-ink">{value}</dd>
     </div>
   )
 }
@@ -181,7 +298,6 @@ function DnoForm({
   onSaved: () => Promise<void>
 }) {
   const [dno_number, setDnoNumber] = useState(initial?.dno_number ?? '')
-  const [size, setSize] = useState(initial?.size ?? '5ft x 4ft')
   const [manufacturer, setManufacturer] = useState<Manufacturer>(
     initial?.manufacturer ?? 'Jaisal Fashion Weave',
   )
@@ -194,6 +310,9 @@ function DnoForm({
   const [category, setCategory] = useState(initial?.category ?? '')
   const [hsn_code, setHsn] = useState(initial?.hsn_code ?? '6304')
   const [gst_rate, setGst] = useState(initial?.gst_rate?.toString() ?? '12')
+  const [low_stock_threshold, setThreshold] = useState(
+    (initial?.low_stock_threshold ?? 10).toString(),
+  )
   const [date_added, setDate] = useState(initial?.date_added ?? todayISO())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -203,9 +322,7 @@ function DnoForm({
     setBusy(true)
     setErr(null)
     try {
-      const payload = {
-        dno_number: dno_number.trim(),
-        size,
+      const fields = {
         manufacturer,
         other_manufacturer_name:
           manufacturer === 'Other' ? other_manufacturer_name.trim() || null : null,
@@ -213,23 +330,27 @@ function DnoForm({
         category: category.trim() || null,
         hsn_code: hsn_code.trim() || null,
         gst_rate: Number(gst_rate),
+        low_stock_threshold: Number(low_stock_threshold) || 10,
         date_added,
       }
       if (initial) {
-        await updateDno(initial.id, payload)
+        await updateDno(initial.id, fields)
       } else {
-        await createDno(payload)
+        await createDno({
+          dno_number: dno_number.trim(),
+          ...fields,
+        })
       }
       await onSaved()
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Save failed')
+      setErr(errorMessage(error, 'Save failed'))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form onSubmit={submit} className="panel mb-4 space-y-3">
+    <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">
         {initial ? `Edit ${initial.dno_number}` : 'Add DNO'}
       </h2>
@@ -243,32 +364,6 @@ function DnoForm({
             onChange={(e) => setDnoNumber(e.target.value)}
             className="num"
             disabled={!!initial}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="size">Size</label>
-          <select
-            id="size"
-            value={size}
-            onChange={(e) => setSize(e.target.value)}
-          >
-            {SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-            {!SIZES.includes(size as (typeof SIZES)[number]) && size ? (
-              <option value={size}>{size}</option>
-            ) : null}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="date_added">Date added</label>
-          <input
-            id="date_added"
-            type="date"
-            value={date_added}
-            onChange={(e) => setDate(e.target.value)}
           />
         </div>
         <div className="field col-span-2">
@@ -335,6 +430,30 @@ function DnoForm({
             required
           />
         </div>
+        <div className="field col-span-2">
+          <label htmlFor="threshold">Low stock threshold</label>
+          <input
+            id="threshold"
+            type="number"
+            min="0"
+            step="1"
+            required
+            value={low_stock_threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+            className="num"
+          />
+        </div>
+        {!initial ? (
+          <div className="field col-span-2">
+            <label htmlFor="date_added">Date added</label>
+            <input
+              id="date_added"
+              type="date"
+              value={date_added}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+        ) : null}
       </div>
       {err ? <p className="err">{err}</p> : null}
       <div className="flex gap-2">

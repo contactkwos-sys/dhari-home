@@ -3,6 +3,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StripeBar } from '../components/StripeBar'
 import { fetchOrders, formatMoney } from '../lib/api'
 import type { Order } from '../types'
+import { errorMessage } from '../types'
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100
@@ -23,7 +24,7 @@ export function BillPage() {
         setOrders(data)
         if (data[0]) setOrderId(data[0].id)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load orders')
+        setError(errorMessage(e, 'Failed to load orders'))
       } finally {
         setLoading(false)
       }
@@ -77,7 +78,7 @@ export function BillPage() {
             orders.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.order_date} · {o.platform} ·{' '}
-                {o.dno_master?.dno_number ?? 'DNO'} · {o.pieces} pcs
+                {o.dno_master?.dno_number ?? 'DNO'} · {o.size} · {o.pieces} pcs
               </option>
             ))
           )}
@@ -148,7 +149,7 @@ export function BillPage() {
                       {order.dno_master?.dno_number}
                     </p>
                     <p className="text-xs text-muted">
-                      {order.dno_master?.size}
+                      {order.size}
                       {order.dno_master?.category
                         ? ` · ${order.dno_master.category}`
                         : ''}
