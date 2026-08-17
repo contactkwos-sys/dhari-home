@@ -77,7 +77,7 @@ export function BillPage() {
             orders.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.order_date} · {o.platform} ·{' '}
-                {o.dno_master?.dno_number ?? 'DNO'} · {o.pieces} pcs
+                {o.dno_master?.dno_number ?? 'DNO'} · {o.size} · {o.pieces} pcs
               </option>
             ))
           )}
@@ -148,7 +148,7 @@ export function BillPage() {
                       {order.dno_master?.dno_number}
                     </p>
                     <p className="text-xs text-muted">
-                      {order.dno_master?.size}
+                      {order.size}
                       {order.dno_master?.category
                         ? ` · ${order.dno_master.category}`
                         : ''}
