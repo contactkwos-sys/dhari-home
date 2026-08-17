@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import {
   createOrder,
@@ -19,11 +20,17 @@ import {
 } from '../types'
 
 export function OrdersPage() {
+  const [search, setSearch] = useSearchParams()
+  const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [dnos, setDnos] = useState<DnoMaster[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+
+  useEffect(() => {
+    if (search.get('add') === '1') setShowForm(true)
+  }, [search])
 
   async function load() {
     setLoading(true)
@@ -52,22 +59,29 @@ export function OrdersPage() {
           <button
             type="button"
             className="btn btn-primary text-sm"
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setShowForm(true)
+              navigate('/orders?add=1')
+            }}
           >
             Add order
           </button>
         }
       />
 
-      {error ? <p className="err mb-3">{error}</p> : null}
+      {error ? <p className="err mb-3 whitespace-pre-wrap">{error}</p> : null}
       {loading ? <p className="text-muted text-sm">Loading…</p> : null}
 
       {showForm ? (
         <OrderForm
           dnos={dnos}
-          onCancel={() => setShowForm(false)}
+          onCancel={() => {
+            setShowForm(false)
+            setSearch({}, { replace: true })
+          }}
           onSaved={async () => {
             setShowForm(false)
+            setSearch({}, { replace: true })
             await load()
           }}
         />
@@ -385,7 +399,7 @@ function OrderForm({
         </div>
       </div>
 
-      {err ? <p className="err">{err}</p> : null}
+      {err ? <p className="err whitespace-pre-wrap">{err}</p> : null}
       <div className="flex gap-2">
         <button
           type="submit"
