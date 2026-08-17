@@ -2,24 +2,15 @@ import type { ReactNode } from 'react'
 import { NavLink, Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useLowStock } from '../lib/lowStock'
+import { tabsForRole } from '../lib/nav'
 
-const allTabs = [
-  { to: '/', label: 'Home', end: true, roles: ['Owner'] as const },
-  { to: '/dno', label: 'DNO', end: false, roles: ['Owner'] as const },
-  {
-    to: '/stock',
-    label: 'Stock',
-    end: false,
-    roles: ['Owner', 'Warehouse'] as const,
-  },
-  {
-    to: '/orders',
-    label: 'Orders',
-    end: false,
-    roles: ['Owner', 'Warehouse'] as const,
-  },
-  { to: '/bill', label: 'Bill', end: false, roles: ['Owner'] as const },
-] as const
+const shortLabel: Record<string, string> = {
+  '/': 'Home',
+  '/dno': 'DNO',
+  '/stock': 'Stock',
+  '/orders': 'Orders',
+  '/bill': 'Bill',
+}
 
 export function BottomNav() {
   const { role } = useAuth()
@@ -27,13 +18,11 @@ export function BottomNav() {
 
   if (!role) return null
 
-  const tabs = allTabs.filter((t) =>
-    (t.roles as readonly string[]).includes(role),
-  )
+  const tabs = tabsForRole(role)
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-[rgba(31,59,87,0.12)] bg-[rgba(250,246,239,0.94)] backdrop-blur-md"
+      className="bottom-nav fixed bottom-0 left-0 right-0 z-40 border-t border-[rgba(31,59,87,0.12)] bg-[rgba(250,246,239,0.94)] backdrop-blur-md lg:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="mx-auto flex max-w-md items-stretch justify-between px-1 py-1.5">
@@ -60,7 +49,7 @@ export function BottomNav() {
                   ].join(' ')}
                 />
                 <span className={isActive ? 'font-semibold' : ''}>
-                  {tab.label}
+                  {shortLabel[tab.to] ?? tab.label}
                 </span>
                 {tab.to === '/stock' && count > 0 ? (
                   <span

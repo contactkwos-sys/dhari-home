@@ -33,13 +33,15 @@ export async function updateDno(
   id: string,
   patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
 ): Promise<DnoMaster> {
+  const payload = sanitizeDnoPatch(patch)
   const { data, error } = await supabase
     .from('dno_master')
-    .update(patch)
+    .update(payload)
     .eq('id', id)
-    .select()
+    .select('*')
     .single()
   if (error) throw error
+  if (!data) throw new Error('Update returned no row — check RLS UPDATE/SELECT on dno_master')
   return normalizeDno(data)
 }
 
@@ -55,13 +57,70 @@ export async function createDno(input: {
   photo_url?: string | null
   low_stock_threshold?: number
 }): Promise<DnoMaster> {
+  const dno_number = input.dno_number.trim()
+  if (!dno_number) throw new Error('DNO number is required')
+
+  const row = {
+    dno_number,
+    manufacturer: input.manufacturer,
+    other_manufacturer_name:
+      input.manufacturer === 'Other'
+        ? input.other_manufacturer_name?.trim() || null
+        : null,
+    purchase_rate:
+      input.purchase_rate == null || Number.isNaN(Number(input.purchase_rate))
+        ? null
+        : Number(input.purchase_rate),
+    category: input.category?.trim() || null,
+    hsn_code: input.hsn_code?.trim() || '6304',
+    gst_rate:
+      input.gst_rate == null || Number.isNaN(Number(input.gst_rate))
+        ? 12
+        : Number(input.gst_rate),
+    date_added: input.date_added || todayISO(),
+    photo_url: input.photo_url ?? null,
+    low_stock_threshold:
+      input.low_stock_threshold == null ||
+      Number.isNaN(Number(input.low_stock_threshold))
+        ? 10
+        : Math.max(0, Math.floor(Number(input.low_stock_threshold))),
+  }
+
   const { data, error } = await supabase
     .from('dno_master')
-    .insert(input)
-    .select()
+    .insert(row)
+    .select('*')
     .single()
   if (error) throw error
+  if (!data) throw new Error('Insert returned no row — check RLS INSERT/SELECT on dno_master')
   return normalizeDno(data)
+}
+
+function sanitizeDnoPatch(
+  patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
+): Partial<Omit<DnoMaster, 'id' | 'dno_number'>> {
+  const out: Partial<Omit<DnoMaster, 'id' | 'dno_number'>> = { ...patch }
+  if ('category' in out) out.category = out.category?.trim() || null
+  if ('hsn_code' in out) out.hsn_code = out.hsn_code?.trim() || null
+  if ('other_manufacturer_name' in out) {
+    out.other_manufacturer_name = out.other_manufacturer_name?.trim() || null
+  }
+  if ('purchase_rate' in out && out.purchase_rate != null) {
+    out.purchase_rate = Number(out.purchase_rate)
+    if (Number.isNaN(out.purchase_rate)) out.purchase_rate = null
+  }
+  if ('gst_rate' in out && out.gst_rate != null) {
+    out.gst_rate = Number(out.gst_rate)
+  }
+  if ('low_stock_threshold' in out && out.low_stock_threshold != null) {
+    out.low_stock_threshold = Math.max(
+      0,
+      Math.floor(Number(out.low_stock_threshold)),
+    )
+  }
+  // Size lives on stock_movements / orders — never send it on dno_master
+  delete (out as { size?: unknown }).size
+  return out
 }
 
 export async function uploadDnoPhoto(
@@ -99,19 +158,60 @@ export async function addStockIn(input: {
   date?: string
   note?: string | null
 }): Promise<StockMovement> {
+  if (!input.dno_id) throw new Error('DNO is required')
+  if (input.size !== '5ft x 4ft' && input.size !== '7ft x 4ft') {
+    throw new Error('Size must be 5ft x 4ft or 7ft x 4ft')
+  }
+  const qty = Math.floor(Number(input.qty))
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw new Error('Quantity must be a positive whole number')
+  }
+
+  const date = input.date || todayISO()
+  const note = input.note?.trim() || null
+
+  // Prefer RPC (security definer) when available — clearer errors / RLS-safe
+  const { data: rpcData, error: rpcError } = await supabase.rpc('add_stock_in', {
+    p_dno_id: input.dno_id,
+    p_size: input.size,
+    p_qty: qty,
+    p_date: date,
+    p_note: note,
+  })
+
+  if (!rpcError && rpcData) {
+    const row = rpcData as StockMovement
+    const { data: joined } = await supabase
+      .from('stock_movements')
+      .select('*, dno_master(dno_number)')
+      .eq('id', row.id)
+      .maybeSingle()
+    return (joined as StockMovement) ?? row
+  }
+
+  // Fallback to direct insert if RPC not deployed yet
+  if (rpcError && !/could not find the function|PGRST202/i.test(rpcError.message)) {
+    throw rpcError
+  }
+
   const { data, error } = await supabase
     .from('stock_movements')
     .insert({
       dno_id: input.dno_id,
       size: input.size,
       type: 'IN',
-      qty: input.qty,
-      date: input.date,
-      note: input.note ?? null,
+      qty,
+      date,
+      note,
     })
     .select('*, dno_master(dno_number)')
     .single()
   if (error) throw error
+  if (!data) {
+    throw new Error(
+      'Stock insert returned no row — check RLS INSERT/SELECT on stock_movements and that size column exists',
+    )
+  }
   return data as StockMovement
 }
 

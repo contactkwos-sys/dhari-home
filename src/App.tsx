@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppHeader } from './components/AppHeader'
 import { BottomNav, RoleGuard } from './components/BottomNav'
+import { SideNav } from './components/SideNav'
 import { AuthProvider, useAuth } from './lib/auth'
 import { LowStockProvider } from './lib/lowStock'
 import { BillPage } from './pages/BillPage'
@@ -30,61 +31,64 @@ function AppRoutes() {
 
   return (
     <>
-      <AppHeader />
-      <Routes>
-        <Route
-          path="/"
-          element={
-            role === 'Warehouse' ? (
-              <Navigate to="/stock" replace />
-            ) : (
-              <HomePage />
-            )
-          }
-        />
-        <Route
-          path="/dno"
-          element={
-            <RoleGuard allow={['Owner']} fallback={home}>
-              <DnoPage />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/stock"
-          element={
-            <RoleGuard allow={['Owner', 'Warehouse']} fallback={home}>
-              <StockPage />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/orders"
-          element={
-            <RoleGuard allow={['Owner', 'Warehouse']} fallback={home}>
-              <OrdersPage />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/bill"
-          element={
-            <RoleGuard allow={['Owner']} fallback={home}>
-              <BillPage />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <RoleGuard allow={['Owner']} fallback={home}>
-              <SettingsPage />
-            </RoleGuard>
-          }
-        />
-        <Route path="*" element={<Navigate to={home} replace />} />
-      </Routes>
-      <BottomNav />
+      <SideNav />
+      <div className="app-main">
+        <AppHeader />
+        <Routes>
+          <Route
+            path="/"
+            element={
+              role === 'Warehouse' ? (
+                <Navigate to="/stock" replace />
+              ) : (
+                <HomePage />
+              )
+            }
+          />
+          <Route
+            path="/dno"
+            element={
+              <RoleGuard allow={['Owner']} fallback={home}>
+                <DnoPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/stock"
+            element={
+              <RoleGuard allow={['Owner', 'Warehouse']} fallback={home}>
+                <StockPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <RoleGuard allow={['Owner', 'Warehouse']} fallback={home}>
+                <OrdersPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/bill"
+            element={
+              <RoleGuard allow={['Owner']} fallback={home}>
+                <BillPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <RoleGuard allow={['Owner']} fallback={home}>
+                <SettingsPage />
+              </RoleGuard>
+            }
+          />
+          <Route path="*" element={<Navigate to={home} replace />} />
+        </Routes>
+        <BottomNav />
+      </div>
     </>
   )
 }

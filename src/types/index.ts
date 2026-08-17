@@ -137,11 +137,33 @@ export function errorMessage(
   error: unknown,
   fallback = 'Something went wrong',
 ): string {
-  if (error instanceof Error && error.message) return error.message
-  if (error && typeof error === 'object' && 'message' in error) {
-    const msg = (error as { message?: unknown }).message
-    if (typeof msg === 'string' && msg) return msg
-  }
   if (typeof error === 'string' && error) return error
+
+  if (error && typeof error === 'object') {
+    const e = error as {
+      message?: unknown
+      details?: unknown
+      hint?: unknown
+      code?: unknown
+      error?: unknown
+      status?: unknown
+    }
+    const parts: string[] = []
+    if (typeof e.message === 'string' && e.message) parts.push(e.message)
+    if (typeof e.details === 'string' && e.details) parts.push(e.details)
+    if (typeof e.hint === 'string' && e.hint) parts.push(`Hint: ${e.hint}`)
+    if (typeof e.code === 'string' && e.code) parts.push(`(${e.code})`)
+    if (parts.length) return parts.join(' — ')
+    if (typeof e.error === 'string' && e.error) return e.error
+  }
+
+  if (error instanceof Error && error.message) {
+    // Safari often surfaces aborted/CORS/network failures as "Load failed"
+    if (/load failed|failed to fetch|networkerror/i.test(error.message)) {
+      return `${error.message} — could not reach Supabase (check network / API URL)`
+    }
+    return error.message
+  }
+
   return fallback
 }

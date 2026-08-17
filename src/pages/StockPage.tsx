@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import {
   addStockIn,
@@ -8,18 +9,27 @@ import {
   fetchStockRows,
   todayISO,
 } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { useLowStock } from '../lib/lowStock'
 import type { DnoMaster, DnoSize, StockMovement, StockRow } from '../types'
 import { SIZES, errorMessage } from '../types'
 
 export function StockPage() {
+  const { isOwner } = useAuth()
   const { refresh: refreshLowStock } = useLowStock()
+  const [search, setSearch] = useSearchParams()
+  const navigate = useNavigate()
   const [rows, setRows] = useState<StockRow[]>([])
   const [ledger, setLedger] = useState<StockMovement[]>([])
   const [dnos, setDnos] = useState<DnoMaster[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const lowOnly = search.get('low') === '1'
+
+  useEffect(() => {
+    if (search.get('add') === '1') setShowForm(true)
+  }, [search])
 
   async function load() {
     setLoading(true)
@@ -45,6 +55,11 @@ export function StockPage() {
     void load()
   }, [])
 
+  const visibleRows = useMemo(() => {
+    if (!lowOnly) return rows
+    return rows.filter((r) => r.balance <= (r.dno.low_stock_threshold ?? 10))
+  }, [rows, lowOnly])
+
   return (
     <div className="page">
       <PageHeader
@@ -54,22 +69,38 @@ export function StockPage() {
           <button
             type="button"
             className="btn btn-primary text-sm"
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setShowForm(true)
+              navigate('/stock?add=1')
+            }}
           >
             Add stock
           </button>
         }
       />
 
-      {error ? <p className="err mb-3">{error}</p> : null}
+      {error ? <p className="err mb-3 whitespace-pre-wrap">{error}</p> : null}
       {loading ? <p className="text-muted text-sm">Loading…</p> : null}
+
+      {lowOnly ? (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-[#9b2c2c]/10 px-3 py-2 text-sm text-[#9b2c2c]">
+          <span>Showing low-stock rows only</span>
+          <Link to="/stock" className="font-medium underline">
+            Clear filter
+          </Link>
+        </div>
+      ) : null}
 
       {showForm ? (
         <AddStockForm
           dnos={dnos}
-          onCancel={() => setShowForm(false)}
+          onCancel={() => {
+            setShowForm(false)
+            setSearch({}, { replace: true })
+          }}
           onSaved={async () => {
             setShowForm(false)
+            setSearch({}, { replace: true })
             await load()
           }}
         />
@@ -90,14 +121,16 @@ export function StockPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-3 text-muted">
-                    No stock yet — use Add stock.
+                    {lowOnly
+                      ? 'No low-stock rows.'
+                      : 'No stock yet — use Add stock.'}
                   </td>
                 </tr>
               ) : (
-                rows.map((r, i) => {
+                visibleRows.map((r, i) => {
                   const low = r.balance <= (r.dno.low_stock_threshold ?? 10)
                   return (
                     <tr
@@ -105,9 +138,18 @@ export function StockPage() {
                       className={i % 2 === 0 ? 'bg-white/60' : 'bg-ivory-dark/40'}
                     >
                       <td className="px-3 py-2">
-                        <div className="num font-medium text-indigo">
-                          {r.dno.dno_number}
-                        </div>
+                        {isOwner ? (
+                          <Link
+                            to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
+                            className="num font-medium text-indigo hover:underline"
+                          >
+                            {r.dno.dno_number}
+                          </Link>
+                        ) : (
+                          <div className="num font-medium text-indigo">
+                            {r.dno.dno_number}
+                          </div>
+                        )}
                         <div className="text-xs text-muted">{r.size}</div>
                       </td>
                       <td className="num px-2 py-2 text-right text-muted">
@@ -269,9 +311,13 @@ function AddStockForm({
           />
         </div>
       </div>
-      {err ? <p className="err">{err}</p> : null}
+      {err ? <p className="err whitespace-pre-wrap">{err}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" className="btn btn-primary" disabled={busy}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={busy || !dno_id}
+        >
           {busy ? 'Saving…' : 'Save'}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>

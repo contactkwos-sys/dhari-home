@@ -9,9 +9,12 @@ export function AppHeader() {
   return (
     <header className="app-header">
       <div className="app-header-inner">
-        <div>
+        <div className="lg:hidden">
           <p className="app-wordmark">DHARI HOME</p>
           <div className="app-header-accent" />
+        </div>
+        <div className="hidden lg:block">
+          <p className="text-sm text-ivory/80">{role ?? ''}</p>
         </div>
         <div className="relative">
           <button
