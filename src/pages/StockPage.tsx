@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import {
-  addStockMovement,
+  addStockIn,
   fetchDnos,
   fetchStockMovements,
   fetchStockRows,
   todayISO,
 } from '../lib/api'
-import type { DnoMaster, MovementType, StockMovement, StockRow } from '../types'
+import { useLowStock } from '../lib/lowStock'
+import type { DnoMaster, DnoSize, StockMovement, StockRow } from '../types'
+import { SIZES, errorMessage } from '../types'
 
 export function StockPage() {
+  const { refresh: refreshLowStock } = useLowStock()
   const [rows, setRows] = useState<StockRow[]>([])
   const [ledger, setLedger] = useState<StockMovement[]>([])
   const [dnos, setDnos] = useState<DnoMaster[]>([])
@@ -30,8 +33,9 @@ export function StockPage() {
       setRows(stock)
       setLedger(movements)
       setDnos(allDnos)
+      void refreshLowStock()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load stock')
+      setError(errorMessage(e, 'Failed to load stock'))
     } finally {
       setLoading(false)
     }
@@ -45,14 +49,14 @@ export function StockPage() {
     <div className="page">
       <PageHeader
         title="Warehouse"
-        subtitle="Balances from stock movements"
+        subtitle="Balances per DNO + size"
         action={
           <button
             type="button"
             className="btn btn-primary text-sm"
             onClick={() => setShowForm(true)}
           >
-            Add move
+            Add stock
           </button>
         }
       />
@@ -61,7 +65,7 @@ export function StockPage() {
       {loading ? <p className="text-muted text-sm">Loading…</p> : null}
 
       {showForm ? (
-        <MovementForm
+        <AddStockForm
           dnos={dnos}
           onCancel={() => setShowForm(false)}
           onSaved={async () => {
@@ -71,41 +75,64 @@ export function StockPage() {
         />
       ) : null}
 
-      <section>
-        <h2 className="mb-2 font-display text-base text-indigo">Balances</h2>
-        <div className="overflow-hidden rounded-xl border border-[rgba(31,59,87,0.1)]">
+      <section className="panel panel-accent !p-0 overflow-hidden">
+        <div className="px-3 pt-3">
+          <h2 className="mb-2 font-display text-base text-indigo">Balances</h2>
+        </div>
+        <div className="overflow-hidden">
           <table className="w-full text-left text-sm">
             <thead className="bg-indigo text-ivory">
               <tr>
-                <th className="px-3 py-2 font-medium">DNO</th>
+                <th className="px-3 py-2 font-medium">DNO / Size</th>
                 <th className="px-2 py-2 text-right font-medium">In</th>
                 <th className="px-2 py-2 text-right font-medium">Out</th>
                 <th className="px-3 py-2 text-right font-medium">Bal</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr
-                  key={r.dno.id}
-                  className={i % 2 === 0 ? 'bg-white/60' : 'bg-ivory-dark/40'}
-                >
-                  <td className="px-3 py-2">
-                    <div className="num font-medium text-indigo">
-                      {r.dno.dno_number}
-                    </div>
-                    <div className="text-xs text-muted">{r.dno.size}</div>
-                  </td>
-                  <td className="num px-2 py-2 text-right text-muted">
-                    {r.inbound}
-                  </td>
-                  <td className="num px-2 py-2 text-right text-muted">
-                    {r.outbound}
-                  </td>
-                  <td className="num px-3 py-2 text-right font-semibold text-indigo">
-                    {r.balance}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-3 text-muted">
+                    No stock yet — use Add stock.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                rows.map((r, i) => {
+                  const low = r.balance <= (r.dno.low_stock_threshold ?? 10)
+                  return (
+                    <tr
+                      key={`${r.dno.id}-${r.size}`}
+                      className={i % 2 === 0 ? 'bg-white/60' : 'bg-ivory-dark/40'}
+                    >
+                      <td className="px-3 py-2">
+                        <div className="num font-medium text-indigo">
+                          {r.dno.dno_number}
+                        </div>
+                        <div className="text-xs text-muted">{r.size}</div>
+                      </td>
+                      <td className="num px-2 py-2 text-right text-muted">
+                        {r.inbound}
+                      </td>
+                      <td className="num px-2 py-2 text-right text-muted">
+                        {r.outbound}
+                      </td>
+                      <td
+                        className={[
+                          'num px-3 py-2 text-right font-semibold',
+                          low ? 'text-[#9b2c2c]' : 'text-indigo',
+                        ].join(' ')}
+                      >
+                        {r.balance}
+                        {low ? (
+                          <span className="ml-1 text-[0.65rem] font-medium text-[#c45c1a]">
+                            LOW
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -129,7 +156,7 @@ export function StockPage() {
                     {m.dno_master?.dno_number ?? m.dno_id.slice(0, 8)}
                   </p>
                   <p className="text-xs text-muted">
-                    {m.date}
+                    {m.size} · {m.date}
                     {m.note ? ` · ${m.note}` : ''}
                   </p>
                 </div>
@@ -156,7 +183,7 @@ export function StockPage() {
   )
 }
 
-function MovementForm({
+function AddStockForm({
   dnos,
   onCancel,
   onSaved,
@@ -166,10 +193,8 @@ function MovementForm({
   onSaved: () => Promise<void>
 }) {
   const [dno_id, setDnoId] = useState(dnos[0]?.id ?? '')
-  const [type, setType] = useState<MovementType>('IN')
+  const [size, setSize] = useState<DnoSize>('5ft x 4ft')
   const [qty, setQty] = useState('1')
-  const [date, setDate] = useState(todayISO())
-  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -178,24 +203,27 @@ function MovementForm({
     setBusy(true)
     setErr(null)
     try {
-      await addStockMovement({
+      await addStockIn({
         dno_id,
-        type,
+        size,
         qty: Number(qty),
-        date,
-        note: note.trim() || null,
+        date: todayISO(),
+        note: 'Purchase / receipt',
       })
       await onSaved()
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Failed to save')
+      setErr(errorMessage(error, 'Failed to save'))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form onSubmit={submit} className="panel mb-4 space-y-3">
-      <h2 className="font-display text-lg text-indigo">Add movement</h2>
+    <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
+      <h2 className="font-display text-lg text-indigo">Add stock</h2>
+      <p className="text-xs text-muted">
+        Adds an IN movement — balances accumulate per DNO + size.
+      </p>
       <div className="grid grid-cols-2 gap-3">
         <div className="field col-span-2">
           <label htmlFor="mv_dno">DNO</label>
@@ -207,24 +235,28 @@ function MovementForm({
           >
             {dnos.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.dno_number} · {d.size}
+                {d.dno_number}
               </option>
             ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="mv_type">Type</label>
+          <label htmlFor="mv_size">Size</label>
           <select
-            id="mv_type"
-            value={type}
-            onChange={(e) => setType(e.target.value as MovementType)}
+            id="mv_size"
+            required
+            value={size}
+            onChange={(e) => setSize(e.target.value as DnoSize)}
           >
-            <option value="IN">IN</option>
-            <option value="OUT">OUT</option>
+            {SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="mv_qty">Qty</label>
+          <label htmlFor="mv_qty">Quantity</label>
           <input
             id="mv_qty"
             type="number"
@@ -234,24 +266,6 @@ function MovementForm({
             value={qty}
             onChange={(e) => setQty(e.target.value)}
             className="num"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="mv_date">Date</label>
-          <input
-            id="mv_date"
-            type="date"
-            required
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="mv_note">Note</label>
-          <input
-            id="mv_note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
           />
         </div>
       </div>
