@@ -9,8 +9,14 @@ import {
   getStockBalance,
   todayISO,
 } from '../lib/api'
-import type { DnoMaster, Order, PaymentStatus, Platform } from '../types'
-import { INDIAN_STATES, PAYMENT_STATUSES, PLATFORMS } from '../types'
+import type { DnoMaster, DnoSize, Order, PaymentStatus, Platform } from '../types'
+import {
+  INDIAN_STATES,
+  PAYMENT_STATUSES,
+  PLATFORMS,
+  SIZES,
+  errorMessage,
+} from '../types'
 
 export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -27,7 +33,7 @@ export function OrdersPage() {
       setOrders(o)
       setDnos(d)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load orders')
+      setError(errorMessage(e, 'Failed to load orders'))
     } finally {
       setLoading(false)
     }
@@ -94,6 +100,9 @@ export function OrdersPage() {
                   </span>
                 </span>
                 <span>
+                  Size <span className="font-medium">{o.size}</span>
+                </span>
+                <span>
                   Pcs <span className="num font-medium">{o.pieces}</span>
                 </span>
                 <span>
@@ -132,6 +141,7 @@ function OrderForm({
 }) {
   const [order_date, setOrderDate] = useState(todayISO())
   const [dno_id, setDnoId] = useState(dnos[0]?.id ?? '')
+  const [size, setSize] = useState<DnoSize>('5ft x 4ft')
   const [platform, setPlatform] = useState<Platform>('Flipkart')
   const [platform_order_id, setPlatformOrderId] = useState('')
   const [pieces, setPieces] = useState('1')
@@ -148,12 +158,12 @@ function OrderForm({
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!dno_id) {
+    if (!dno_id || !size) {
       setAvailable(null)
       return
     }
     let cancelled = false
-    void getStockBalance(dno_id)
+    void getStockBalance(dno_id, size)
       .then((bal) => {
         if (!cancelled) setAvailable(bal)
       })
@@ -163,7 +173,7 @@ function OrderForm({
     return () => {
       cancelled = true
     }
-  }, [dno_id])
+  }, [dno_id, size])
 
   const piecesNum = Number(pieces) || 0
   const blocked = useMemo(() => {
@@ -174,7 +184,9 @@ function OrderForm({
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (blocked) {
-      setErr(`Only ${available} in stock — cannot save ${piecesNum} pieces.`)
+      setErr(
+        `Only ${available} in stock for ${size} — cannot save ${piecesNum} pieces.`,
+      )
       return
     }
     setBusy(true)
@@ -183,6 +195,7 @@ function OrderForm({
       await createOrder({
         order_date,
         dno_id,
+        size,
         platform,
         platform_order_id: platform_order_id.trim() || null,
         pieces: piecesNum,
@@ -196,7 +209,7 @@ function OrderForm({
       })
       await onSaved()
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Failed to create order')
+      setErr(errorMessage(error, 'Failed to create order'))
     } finally {
       setBusy(false)
     }
@@ -207,7 +220,7 @@ function OrderForm({
       <h2 className="font-display text-lg text-indigo">Add order</h2>
 
       <div className="rounded-lg bg-indigo/5 px-3 py-2 text-sm">
-        Current stock:{' '}
+        Stock for {size}:{' '}
         <span className="num font-semibold text-indigo">
           {available == null ? '…' : available}
         </span>
@@ -241,7 +254,7 @@ function OrderForm({
             ))}
           </select>
         </div>
-        <div className="field col-span-2">
+        <div className="field">
           <label htmlFor="ord_dno">DNO</label>
           <select
             id="ord_dno"
@@ -251,7 +264,22 @@ function OrderForm({
           >
             {dnos.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.dno_number} · {d.size}
+                {d.dno_number}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="ord_size">Size</label>
+          <select
+            id="ord_size"
+            required
+            value={size}
+            onChange={(e) => setSize(e.target.value as DnoSize)}
+          >
+            {SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
           </select>

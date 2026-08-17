@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type {
   DnoMaster,
+  DnoSize,
   Manufacturer,
   Order,
   Platform,
@@ -20,7 +21,7 @@ export async function fetchDnos(): Promise<DnoMaster[]> {
 
 export async function updateDno(
   id: string,
-  patch: Partial<DnoMaster>,
+  patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
 ): Promise<DnoMaster> {
   const { data, error } = await supabase
     .from('dno_master')
@@ -34,7 +35,6 @@ export async function updateDno(
 
 export async function createDno(input: {
   dno_number: string
-  size: string
   manufacturer: Manufacturer
   other_manufacturer_name?: string | null
   purchase_rate?: number | null
@@ -74,38 +74,43 @@ export async function uploadDnoPhoto(
 export async function fetchStockMovements(): Promise<StockMovement[]> {
   const { data, error } = await supabase
     .from('stock_movements')
-    .select('*, dno_master(dno_number, size)')
+    .select('*, dno_master(dno_number)')
     .order('date', { ascending: false })
     .order('id', { ascending: false })
   if (error) throw error
   return (data ?? []) as StockMovement[]
 }
 
-export async function addStockMovement(input: {
+export async function addStockIn(input: {
   dno_id: string
-  type: 'IN' | 'OUT'
+  size: DnoSize
   qty: number
-  date: string
+  date?: string
   note?: string | null
 }): Promise<StockMovement> {
-  if (input.type === 'OUT') {
-    const bal = await getStockBalance(input.dno_id)
-    if (bal < input.qty) {
-      throw new Error(`Insufficient stock: available ${bal}, requested ${input.qty}`)
-    }
-  }
   const { data, error } = await supabase
     .from('stock_movements')
-    .insert(input)
-    .select('*, dno_master(dno_number, size)')
+    .insert({
+      dno_id: input.dno_id,
+      size: input.size,
+      type: 'IN',
+      qty: input.qty,
+      date: input.date,
+      note: input.note ?? null,
+    })
+    .select('*, dno_master(dno_number)')
     .single()
   if (error) throw error
   return data as StockMovement
 }
 
-export async function getStockBalance(dnoId: string): Promise<number> {
-  const { data, error } = await supabase.rpc('dno_stock_balance', {
+export async function getStockBalance(
+  dnoId: string,
+  size: DnoSize,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('dno_size_stock_balance', {
     p_dno_id: dnoId,
+    p_size: size,
   })
   if (error) throw error
   return Number(data ?? 0)
@@ -116,22 +121,40 @@ export async function fetchStockRows(): Promise<StockRow[]> {
     fetchDnos(),
     fetchStockMovements(),
   ])
-  return dnos.map((dno) => {
-    const mine = movements.filter((m) => m.dno_id === dno.id)
+  const dnoById = new Map(dnos.map((d) => [d.id, d]))
+  const keys = new Map<string, { dno_id: string; size: DnoSize }>()
+
+  for (const m of movements) {
+    const key = `${m.dno_id}::${m.size}`
+    if (!keys.has(key)) keys.set(key, { dno_id: m.dno_id, size: m.size })
+  }
+
+  const rows: StockRow[] = []
+  for (const { dno_id, size } of keys.values()) {
+    const dno = dnoById.get(dno_id)
+    if (!dno) continue
+    const mine = movements.filter((m) => m.dno_id === dno_id && m.size === size)
     const inbound = mine
       .filter((m) => m.type === 'IN')
       .reduce((s, m) => s + m.qty, 0)
     const outbound = mine
       .filter((m) => m.type === 'OUT')
       .reduce((s, m) => s + m.qty, 0)
-    return { dno, inbound, outbound, balance: inbound - outbound }
+    rows.push({ dno, size, inbound, outbound, balance: inbound - outbound })
+  }
+
+  rows.sort((a, b) => {
+    const byDno = a.dno.dno_number.localeCompare(b.dno.dno_number)
+    if (byDno !== 0) return byDno
+    return a.size.localeCompare(b.size)
   })
+  return rows
 }
 
 export async function fetchOrders(): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, dno_master(dno_number, size, hsn_code, gst_rate, category)')
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category)')
     .order('order_date', { ascending: false })
     .order('id', { ascending: false })
   if (error) throw error
@@ -141,6 +164,7 @@ export async function fetchOrders(): Promise<Order[]> {
 export async function createOrder(input: {
   order_date: string
   dno_id: string
+  size: DnoSize
   platform: Platform
   platform_order_id?: string | null
   pieces: number
@@ -165,6 +189,7 @@ export async function createOrder(input: {
     p_awb_number: input.awb_number ?? null,
     p_payment_status: input.payment_status,
     p_invoice_no: input.invoice_no ?? null,
+    p_size: input.size,
   })
   if (error) throw error
   return data as Order

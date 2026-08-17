@@ -5,7 +5,7 @@ const tiles = [
   {
     to: '/dno',
     title: 'DNO Master',
-    copy: 'Photos, sizes & rates for each design.',
+    copy: 'Photos, manufacturer & rates for each design.',
   },
   {
     to: '/stock',

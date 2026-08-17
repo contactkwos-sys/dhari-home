@@ -10,7 +10,7 @@ import {
   formatMoney,
 } from '../lib/api'
 import type { DnoMaster, Manufacturer } from '../types'
-import { SIZES } from '../types'
+import { errorMessage } from '../types'
 
 export function DnoPage() {
   const [rows, setRows] = useState<DnoMaster[]>([])
@@ -27,7 +27,7 @@ export function DnoPage() {
     try {
       setRows(await fetchDnos())
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load DNOs')
+      setError(errorMessage(e, 'Failed to load DNOs'))
     } finally {
       setLoading(false)
     }
@@ -47,7 +47,7 @@ export function DnoPage() {
         prev.map((r) => (r.id === dno.id ? { ...r, photo_url: url } : r)),
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      setError(errorMessage(e, 'Upload failed'))
     } finally {
       setUploadingId(null)
     }
@@ -143,12 +143,14 @@ export function DnoPage() {
                   Edit
                 </button>
               </div>
-              <p className="mt-0.5 text-sm text-ink">{dno.size}</p>
-              <p className="truncate text-xs text-muted">
+              <p className="mt-0.5 truncate text-sm text-muted">
                 {dno.manufacturer === 'Other'
                   ? dno.other_manufacturer_name || 'Other'
                   : dno.manufacturer}
               </p>
+              {dno.category ? (
+                <p className="text-xs text-ink">{dno.category}</p>
+              ) : null}
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
                 <span>
                   Rate{' '}
@@ -181,7 +183,6 @@ function DnoForm({
   onSaved: () => Promise<void>
 }) {
   const [dno_number, setDnoNumber] = useState(initial?.dno_number ?? '')
-  const [size, setSize] = useState(initial?.size ?? '5ft x 4ft')
   const [manufacturer, setManufacturer] = useState<Manufacturer>(
     initial?.manufacturer ?? 'Jaisal Fashion Weave',
   )
@@ -203,9 +204,7 @@ function DnoForm({
     setBusy(true)
     setErr(null)
     try {
-      const payload = {
-        dno_number: dno_number.trim(),
-        size,
+      const fields = {
         manufacturer,
         other_manufacturer_name:
           manufacturer === 'Other' ? other_manufacturer_name.trim() || null : null,
@@ -216,13 +215,16 @@ function DnoForm({
         date_added,
       }
       if (initial) {
-        await updateDno(initial.id, payload)
+        await updateDno(initial.id, fields)
       } else {
-        await createDno(payload)
+        await createDno({
+          dno_number: dno_number.trim(),
+          ...fields,
+        })
       }
       await onSaved()
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Save failed')
+      setErr(errorMessage(error, 'Save failed'))
     } finally {
       setBusy(false)
     }
@@ -243,32 +245,6 @@ function DnoForm({
             onChange={(e) => setDnoNumber(e.target.value)}
             className="num"
             disabled={!!initial}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="size">Size</label>
-          <select
-            id="size"
-            value={size}
-            onChange={(e) => setSize(e.target.value)}
-          >
-            {SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-            {!SIZES.includes(size as (typeof SIZES)[number]) && size ? (
-              <option value={size}>{size}</option>
-            ) : null}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="date_added">Date added</label>
-          <input
-            id="date_added"
-            type="date"
-            value={date_added}
-            onChange={(e) => setDate(e.target.value)}
           />
         </div>
         <div className="field col-span-2">
@@ -335,6 +311,17 @@ function DnoForm({
             required
           />
         </div>
+        {!initial ? (
+          <div className="field col-span-2">
+            <label htmlFor="date_added">Date added</label>
+            <input
+              id="date_added"
+              type="date"
+              value={date_added}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+        ) : null}
       </div>
       {err ? <p className="err">{err}</p> : null}
       <div className="flex gap-2">
