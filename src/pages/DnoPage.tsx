@@ -122,7 +122,6 @@ export function DnoPage() {
               }}
               type="file"
               accept="image/*"
-              capture="environment"
               className="hidden"
               onChange={(e) => {
                 void onPhotoPick(dno, e.target.files?.[0])
