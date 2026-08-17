@@ -1,0 +1,223 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-indigo: #1f3b57;
+  --color-indigo-deep: #162a3e;
+  --color-turmeric: #c98a2c;
+  --color-turmeric-soft: #e2b56a;
+  --color-ivory: #faf6ef;
+  --color-ivory-dark: #efe8da;
+  --color-clay: #8b5a3c;
+  --color-ink: #1a1a1a;
+  --color-muted: #5c6570;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background:
+      radial-gradient(ellipse 120% 80% at 0% 0%, rgba(201, 138, 44, 0.12), transparent 55%),
+      radial-gradient(ellipse 90% 60% at 100% 10%, rgba(31, 59, 87, 0.08), transparent 50%),
+      linear-gradient(180deg, #faf6ef 0%, #f3eee4 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .stripe-bar {
+    height: 3px;
+    width: 100%;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      #1f3b57 0%,
+      #1f3b57 18%,
+      #c98a2c 18%,
+      #c98a2c 36%,
+      #8b5a3c 36%,
+      #8b5a3c 54%,
+      #2f6b4f 54%,
+      #2f6b4f 72%,
+      #b85c38 72%,
+      #b85c38 100%
+    );
+  }
+
+  .app-shell {
+    max-width: 28rem;
+    margin: 0 auto;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .page {
+    flex: 1;
+    padding: 1rem 1rem 5.5rem;
+    animation: rise-in 320ms ease-out both;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.65rem;
+    letter-spacing: -0.02em;
+    color: var(--color-indigo);
+    margin: 0;
+  }
+
+  .page-sub {
+    margin: 0.25rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.9rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border: none;
+    border-radius: 0.65rem;
+    padding: 0.7rem 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: transform 160ms ease, background 160ms ease, opacity 160ms ease;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-indigo);
+    color: #faf6ef;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-indigo-deep);
+  }
+
+  .btn-accent {
+    background: var(--color-turmeric);
+    color: #1a1a1a;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-indigo);
+    border: 1px solid rgba(31, 59, 87, 0.2);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .field label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    border: 1px solid rgba(31, 59, 87, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 0.55rem;
+    padding: 0.65rem 0.75rem;
+    color: var(--color-ink);
+    outline: none;
+  }
+
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
+    border-color: var(--color-turmeric);
+    box-shadow: 0 0 0 3px rgba(201, 138, 44, 0.18);
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel {
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(31, 59, 87, 0.08);
+    border-radius: 1rem;
+    padding: 0.9rem;
+  }
+
+  .err {
+    color: #9b2c2c;
+    font-size: 0.85rem;
+  }
+
+  .ok {
+    color: #2f6b4f;
+    font-size: 0.85rem;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-soft {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tab-pop {
+  from {
+    transform: scale(0.92);
+  }
+  to {
+    transform: scale(1);
+  }
+}
