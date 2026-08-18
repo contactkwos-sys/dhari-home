@@ -3,9 +3,9 @@ import type { FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { resetRolePin } from '../lib/api'
 import {
+  DEFAULT_STAFF_WHATSAPP_E164,
   staffSupportWhatsAppDisplay,
   staffSupportWhatsAppHref,
-  getStaffSupportWhatsApp,
 } from '../lib/support'
 import {
   getWarehouseWhatsAppPhone,
@@ -56,15 +56,15 @@ export function SettingsPage() {
     setWaErr(null)
     const digits = waPhone.replace(/\D/g, '')
     if (digits && digits.length < 10) {
-      setWaErr('Include country code, e.g. 9198XXXXXXXX')
+      setWaErr('Include country code, e.g. 919825063208')
       return
     }
-    setWarehouseWhatsAppPhone(digits)
-    setWaPhone(digits)
+    setWarehouseWhatsAppPhone(digits || DEFAULT_STAFF_WHATSAPP_E164)
+    setWaPhone(digits || DEFAULT_STAFF_WHATSAPP_E164)
     setWaOk(
       digits
         ? 'Warehouse WhatsApp number saved on this device'
-        : 'WhatsApp number cleared — pack links will open chat picker',
+        : `Reset to default packing number (${DEFAULT_STAFF_WHATSAPP_E164})`,
     )
   }
 
@@ -80,10 +80,10 @@ export function SettingsPage() {
           Warehouse WhatsApp
         </h2>
         <p className="text-sm text-muted">
-          Optional. After issuing an order, “Send to packing on WhatsApp” opens
-          WhatsApp / WhatsApp Business with design number, size, pieces,
-          platform, and a link to the DN photo for packing. Leave blank to
-          choose the chat each time.
+          Pre-filled with the packing staff number. After issuing an order,
+          “Send to packing on WhatsApp” opens WhatsApp / WhatsApp Business with
+          design number, size, pieces, platform, and a DN photo link. Change
+          this if packing uses a different phone.
         </p>
         <div className="field">
           <label htmlFor="wa_phone">Phone (with country code)</label>
@@ -92,7 +92,7 @@ export function SettingsPage() {
             inputMode="tel"
             value={waPhone}
             onChange={(e) => setWaPhone(e.target.value.replace(/\D/g, ''))}
-            placeholder="9198XXXXXXXX"
+            placeholder={DEFAULT_STAFF_WHATSAPP_E164}
             className="num"
           />
         </div>
@@ -161,26 +161,15 @@ export function SettingsPage() {
       <section className="panel mt-4 space-y-1.5">
         <h2 className="font-display text-lg text-indigo">About</h2>
         <p className="text-sm text-muted">
-          Built by KWOS — Powered by Kumaresh Budhia
-        </p>
-        <p className="text-sm text-muted">
-          For any help, WhatsApp:{' '}
-          {staffSupportWhatsAppHref() && getStaffSupportWhatsApp() ? (
-            <a
-              href={staffSupportWhatsAppHref()!}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="num text-indigo underline-offset-2 hover:underline"
-            >
-              {staffSupportWhatsAppDisplay()}
-            </a>
-          ) : (
-            <span className="num">{staffSupportWhatsAppDisplay()}</span>
-          )}
-        </p>
-        <p className="text-xs text-muted">
-          Set <span className="num">VITE_STAFF_SUPPORT_WHATSAPP</span> in env when
-          the support number is confirmed.
+          Built by KWOS — Powered by Kumaresh Budhia · For any help, WhatsApp:{' '}
+          <a
+            href={staffSupportWhatsAppHref()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="num text-indigo underline-offset-2 hover:underline"
+          >
+            {staffSupportWhatsAppDisplay()}
+          </a>
         </p>
       </section>
     </div>

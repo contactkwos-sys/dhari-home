@@ -54,4 +54,4 @@ Migrations & functions:
 |----------|---------|
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
-| `VITE_STAFF_SUPPORT_WHATSAPP` | Support WhatsApp digits (footer). Alias: `STAFF_SUPPORT_WHATSAPP` |
+| `VITE_STAFF_SUPPORT_WHATSAPP` | Support/packing WhatsApp digits with country code (default `919825063208`) |
