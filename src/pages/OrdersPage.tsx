@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
+import { DnoPicker } from '../components/DnoPicker'
 import {
   createOrder,
   fetchDnos,
@@ -20,6 +21,15 @@ import {
   errorMessage,
 } from '../types'
 
+const GatePassPanel = lazy(() =>
+  import('../components/GatePassPanel').then((m) => ({ default: m.GatePassPanel })),
+)
+const GatePassScanner = lazy(() =>
+  import('../components/GatePassScanner').then((m) => ({
+    default: m.GatePassScanner,
+  })),
+)
+
 export function OrdersPage() {
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
@@ -29,6 +39,8 @@ export function OrdersPage() {
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [packPrompt, setPackPrompt] = useState<PackDispatchPayload | null>(null)
+  const [gatePassOrderId, setGatePassOrderId] = useState<string | null>(null)
+  const [showScanner, setShowScanner] = useState(false)
 
   useEffect(() => {
     if (search.get('add') === '1') setShowForm(true)
@@ -60,31 +72,86 @@ export function OrdersPage() {
       platform: o.platform,
       platformOrderId: o.platform_order_id,
       buyerName: o.buyer_name,
+      photoUrl: o.dno_master?.photo_url ?? null,
     }
   }
+
+  function upsertOrder(updated: Order) {
+    setOrders((prev) => {
+      const idx = prev.findIndex((o) => o.id === updated.id)
+      if (idx < 0) return [updated, ...prev]
+      const next = [...prev]
+      next[idx] = { ...prev[idx], ...updated }
+      return next
+    })
+  }
+
+  const gatePassOrder = useMemo(
+    () => orders.find((o) => o.id === gatePassOrderId) ?? null,
+    [orders, gatePassOrderId],
+  )
 
   return (
     <div className="page">
       <PageHeader
         title="Orders"
-        subtitle="Marketplace dispatch"
+        subtitle="Pick DN, WhatsApp pack, gate pass"
         action={
-          <button
-            type="button"
-            className="btn btn-primary text-sm"
-            onClick={() => {
-              setShowForm(true)
-              setPackPrompt(null)
-              navigate('/orders?add=1')
-            }}
-          >
-            Add order
-          </button>
+          <div className="flex flex-col items-end gap-1.5 sm:flex-row">
+            <button
+              type="button"
+              className="btn btn-ghost text-sm"
+              onClick={() => {
+                setShowScanner(true)
+                setGatePassOrderId(null)
+                setShowForm(false)
+                setPackPrompt(null)
+              }}
+            >
+              Scan Gate Pass
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary text-sm"
+              onClick={() => {
+                setShowForm(true)
+                setPackPrompt(null)
+                setShowScanner(false)
+                setGatePassOrderId(null)
+                navigate('/orders?add=1')
+              }}
+            >
+              Add order
+            </button>
+          </div>
         }
       />
 
       {error ? <p className="err mb-3 whitespace-pre-wrap">{error}</p> : null}
       {loading ? <p className="text-muted text-sm">Loading…</p> : null}
+
+      {showScanner ? (
+        <Suspense fallback={<p className="text-sm text-muted mb-4">Loading scanner…</p>}>
+          <GatePassScanner
+            onClose={() => setShowScanner(false)}
+            onReceived={(updated) => {
+              upsertOrder(updated)
+            }}
+          />
+        </Suspense>
+      ) : null}
+
+      {gatePassOrder ? (
+        <Suspense fallback={<p className="text-sm text-muted mb-4">Loading gate pass…</p>}>
+          <GatePassPanel
+            order={gatePassOrder}
+            onClose={() => setGatePassOrderId(null)}
+            onIssued={(updated) => {
+              upsertOrder(updated)
+            }}
+          />
+        </Suspense>
+      ) : null}
 
       {packPrompt ? (
         <PackDispatchBanner
@@ -116,7 +183,11 @@ export function OrdersPage() {
           orders.map((o) => (
             <li key={o.id} className="panel panel-accent">
               <div className="flex items-start gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">
+                <Link
+                  to={`/dno?id=${encodeURIComponent(o.dno_id)}`}
+                  className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ivory-dark"
+                  aria-label={`Open design ${o.dno_master?.dno_number ?? ''}`}
+                >
                   {o.dno_master?.photo_url ? (
                     <img
                       src={o.dno_master.photo_url}
@@ -128,7 +199,7 @@ export function OrdersPage() {
                       No photo
                     </span>
                   )}
-                </div>
+                </Link>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -145,10 +216,13 @@ export function OrdersPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                     <span>
-                      Design{' '}
-                      <span className="num font-medium">
+                      DN{' '}
+                      <Link
+                        to={`/dno?id=${encodeURIComponent(o.dno_id)}`}
+                        className="num font-medium text-indigo hover:underline"
+                      >
                         {o.dno_master?.dno_number ?? '—'}
-                      </span>
+                      </Link>
                     </span>
                     <span>
                       Size <span className="font-medium">{o.size}</span>
@@ -173,13 +247,39 @@ export function OrdersPage() {
                       {[o.courier, o.awb_number].filter(Boolean).join(' · ')}
                     </p>
                   )}
-                  <div className="mt-2">
+                  {o.gate_pass_issued_at ? (
+                    <p className="mt-1 text-xs text-muted">
+                      Gate pass issued
+                      {o.gate_pass_received_at
+                        ? ' · received back ✓'
+                        : ' · awaiting return'}
+                    </p>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Link
+                      to="/stock"
+                      className="btn btn-ghost !px-2.5 !py-1 text-xs"
+                    >
+                      Warehouse stock
+                    </Link>
                     <button
                       type="button"
                       className="btn btn-accent !px-2.5 !py-1 text-xs"
                       onClick={() => openWhatsAppPack(packPayloadFromOrder(o))}
                     >
-                      WhatsApp pack
+                      Send to packing on WhatsApp
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost !px-2.5 !py-1 text-xs"
+                      onClick={() => {
+                        setShowScanner(false)
+                        setGatePassOrderId(o.id)
+                        setPackPrompt(null)
+                        setShowForm(false)
+                      }}
+                    >
+                      Gate Pass
                     </button>
                   </div>
                 </div>
@@ -203,7 +303,7 @@ function PackDispatchBanner({
     <div className="panel panel-accent mb-4 border border-turmeric/40 bg-[#c98a2c]/10">
       <h2 className="font-display text-lg text-indigo">Issued to warehouse</h2>
       <p className="mt-1 text-sm text-muted">
-        Stock deducted. Send packing details to the warehouse department on
+        Stock deducted. Send packing details (with design photo link) to staff on
         WhatsApp / WhatsApp Business.
       </p>
       <p className="mt-2 num text-sm text-ink">
@@ -216,7 +316,7 @@ function PackDispatchBanner({
           className="btn btn-primary text-sm"
           onClick={() => openWhatsAppPack(payload)}
         >
-          Send WhatsApp
+          Send to packing on WhatsApp
         </button>
         <button type="button" className="btn btn-ghost text-sm" onClick={onClose}>
           Dismiss
@@ -291,7 +391,7 @@ function OrderForm({
       return
     }
     if (!selected) {
-      setErr('Select a design from the design view.')
+      setErr('Select a DN from the list.')
       return
     }
     setBusy(true)
@@ -319,6 +419,7 @@ function OrderForm({
         platform,
         platformOrderId: platform_order_id.trim() || null,
         buyerName: buyer_name.trim() || null,
+        photoUrl: selected.photo_url ?? null,
       })
     } catch (error) {
       setErr(errorMessage(error, 'Failed to create order'))
@@ -331,9 +432,18 @@ function OrderForm({
     <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">Add order</h2>
       <p className="text-xs text-muted">
-        Select a design, issue stock, then notify warehouse on WhatsApp to pack
-        for Flipkart / Amazon / IndiaMART dispatch.
+        Pick DN from the list, check warehouse stock, issue, then WhatsApp /
+        WhatsApp Business to pack.
       </p>
+
+      <DnoPicker
+        id="ord_dno"
+        label="DN number"
+        dnos={dnos}
+        value={dno_id}
+        onChange={setDnoId}
+        viewTo="/stock"
+      />
 
       <div className="rounded-lg bg-indigo/5 px-3 py-2 text-sm">
         Stock for {size}:{' '}
@@ -342,64 +452,6 @@ function OrderForm({
         </span>
         {blocked ? (
           <span className="err ml-2">Not enough stock</span>
-        ) : null}
-      </div>
-
-      <div className="field">
-        <label>Design view</label>
-        {dnos.length === 0 ? (
-          <p className="text-sm text-muted">
-            No designs yet — add one from DNO Master or Warehouse.
-          </p>
-        ) : (
-          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {dnos.map((d) => {
-              const active = d.id === dno_id
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => setDnoId(d.id)}
-                  className={[
-                    'overflow-hidden rounded-lg border text-left transition',
-                    active
-                      ? 'border-indigo ring-2 ring-indigo/30'
-                      : 'border-[rgba(31,59,87,0.12)] hover:border-indigo/40',
-                  ].join(' ')}
-                  aria-pressed={active}
-                >
-                  <div className="aspect-square bg-ivory-dark">
-                    {d.photo_url ? (
-                      <img
-                        src={d.photo_url}
-                        alt={d.dno_number}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-[0.65rem] text-muted">
-                        No photo
-                      </span>
-                    )}
-                  </div>
-                  <div className="px-2 py-1.5">
-                    <p className="num text-xs font-semibold text-indigo">
-                      {d.dno_number}
-                    </p>
-                    <p className="truncate text-[0.65rem] text-muted">
-                      {d.category || 'Uncategorized'}
-                    </p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        )}
-        {selected ? (
-          <p className="mt-2 text-xs text-muted">
-            Selected:{' '}
-            <span className="num font-medium text-ink">{selected.dno_number}</span>
-            {selected.category ? ` · ${selected.category}` : ''}
-          </p>
         ) : null}
       </div>
 
@@ -424,22 +476,6 @@ function OrderForm({
             {PLATFORMS.map((p) => (
               <option key={p} value={p}>
                 {p}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field col-span-2">
-          <label htmlFor="ord_dno">Design (DNO)</label>
-          <select
-            id="ord_dno"
-            required
-            value={dno_id}
-            onChange={(e) => setDnoId(e.target.value)}
-          >
-            {dnos.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.dno_number}
-                {d.category ? ` · ${d.category}` : ''}
               </option>
             ))}
           </select>

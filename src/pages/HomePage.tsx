@@ -112,16 +112,23 @@ export function HomePage() {
         <StatCard
           label="Total Stock Value"
           value={formatMoney(stats.totalStockValue)}
+          to="/stock"
         />
-        <StatCard label="Total Designs" value={String(stats.totalDesigns)} />
+        <StatCard
+          label="Total Designs"
+          value={String(stats.totalDesigns)}
+          to="/dno"
+        />
         <StatCard
           label="Pending Orders"
           value={String(stats.pendingOrders)}
           hint="COD Pending"
+          to="/orders"
         />
         <StatCard
           label="This Month's Sales"
           value={formatMoney(stats.monthSales)}
+          to="/orders"
         />
       </section>
 
@@ -139,62 +146,76 @@ export function HomePage() {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <section className="panel panel-accent">
-          <h2 className="font-display text-lg text-indigo">Stock Summary</h2>
-          <p className="text-xs text-muted">Balance split by size</p>
-          {slices.length === 0 ? (
-            <p className="mt-6 text-sm text-muted">No stock yet.</p>
-          ) : (
-            <div className="relative mx-auto mt-2 h-56 w-full max-w-xs">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={slices}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius="58%"
-                    outerRadius="82%"
-                    paddingAngle={2}
-                    stroke="none"
-                  >
-                    {slices.map((_, i) => (
-                      <Cell
-                        key={slices[i].name}
-                        fill={SIZE_COLORS[i % SIZE_COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value) => [`${value} pcs`, 'Balance']}
-                    contentStyle={{
-                      borderRadius: 8,
-                      borderColor: 'rgba(31,59,87,0.12)',
-                      fontSize: 12,
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className="num text-2xl font-semibold text-indigo">
-                  {totalPcs}
-                </p>
-                <p className="text-[0.65rem] uppercase tracking-wide text-muted">
-                  total pcs
-                </p>
-              </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <h2 className="font-display text-lg text-indigo">Stock Summary</h2>
+              <p className="text-xs text-muted">Balance split by size</p>
             </div>
-          )}
-          <ul className="mt-2 flex flex-wrap justify-center gap-3 text-xs">
-            {slices.map((s, i) => (
-              <li key={s.name} className="flex items-center gap-1.5">
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-sm"
-                  style={{ background: SIZE_COLORS[i % SIZE_COLORS.length] }}
-                />
-                <span className="text-muted">{s.name}</span>
-                <span className="num font-medium text-ink">{s.value}</span>
-              </li>
-            ))}
-          </ul>
+            <Link to="/stock" className="text-xs font-medium text-turmeric">
+              Warehouse →
+            </Link>
+          </div>
+          <button
+            type="button"
+            className="mt-1 w-full text-left"
+            onClick={() => navigate('/stock')}
+            aria-label="Open warehouse stock"
+          >
+            {slices.length === 0 ? (
+              <p className="mt-6 text-sm text-muted">No stock yet.</p>
+            ) : (
+              <div className="relative mx-auto mt-2 h-56 w-full max-w-xs">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={slices}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius="58%"
+                      outerRadius="82%"
+                      paddingAngle={2}
+                      stroke="none"
+                    >
+                      {slices.map((_, i) => (
+                        <Cell
+                          key={slices[i].name}
+                          fill={SIZE_COLORS[i % SIZE_COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => [`${value} pcs`, 'Balance']}
+                      contentStyle={{
+                        borderRadius: 8,
+                        borderColor: 'rgba(31,59,87,0.12)',
+                        fontSize: 12,
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="num text-2xl font-semibold text-indigo">
+                    {totalPcs}
+                  </p>
+                  <p className="text-[0.65rem] uppercase tracking-wide text-muted">
+                    total pcs
+                  </p>
+                </div>
+              </div>
+            )}
+            <ul className="mt-2 flex flex-wrap justify-center gap-3 text-xs">
+              {slices.map((s, i) => (
+                <li key={s.name} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-sm"
+                    style={{ background: SIZE_COLORS[i % SIZE_COLORS.length] }}
+                  />
+                  <span className="text-muted">{s.name}</span>
+                  <span className="num font-medium text-ink">{s.value}</span>
+                </li>
+              ))}
+            </ul>
+          </button>
         </section>
 
         <section className="panel panel-accent">
@@ -209,21 +230,44 @@ export function HomePage() {
               <li className="text-sm text-muted">No orders yet.</li>
             ) : (
               recentOrders.map((o) => (
-                <li
-                  key={o.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-ivory-dark/45 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-indigo">
-                      {o.platform}
-                    </p>
-                    <p className="num truncate text-xs text-muted">
-                      {o.platform_order_id || o.id.slice(0, 8)} · {o.order_date}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-white/80 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-indigo">
-                    {o.payment_status}
-                  </span>
+                <li key={o.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg bg-ivory-dark/45 px-3 py-2 text-left"
+                    onClick={() =>
+                      o.dno_id ? openDno(o.dno_id) : navigate('/orders')
+                    }
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-ivory-dark">
+                        {o.dno_master?.photo_url ? (
+                          <img
+                            src={o.dno_master.photo_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-[0.5rem] text-muted">
+                            —
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-indigo">
+                          {o.platform}
+                        </p>
+                        <p className="num truncate text-xs text-muted">
+                          {o.dno_master?.dno_number ||
+                            o.platform_order_id ||
+                            o.id.slice(0, 8)}{' '}
+                          · {o.order_date}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-md bg-white/80 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-indigo">
+                      {o.payment_status}
+                    </span>
+                  </button>
                 </li>
               ))
             )}
@@ -244,33 +288,36 @@ export function HomePage() {
               <li className="text-sm text-muted">No movements yet.</li>
             ) : (
               recentMoves.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-ivory-dark/45 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="num text-sm font-medium text-indigo">
-                      {m.dno_master?.dno_number ?? m.dno_id.slice(0, 8)} ·{' '}
-                      {m.size}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {m.date} · {m.type}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p
-                      className={[
-                        'num text-sm font-semibold',
-                        m.type === 'IN' ? 'text-[#2f6b4f]' : 'text-[#9b2c2c]',
-                      ].join(' ')}
-                    >
-                      {m.type === 'IN' ? '+' : '−'}
-                      {m.qty}
-                    </p>
-                    <p className="text-[0.65rem] text-muted">
-                      bal {m.balance_after}
-                    </p>
-                  </div>
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg bg-ivory-dark/45 px-3 py-2 text-left"
+                    onClick={() => openDno(m.dno_id)}
+                  >
+                    <div className="min-w-0">
+                      <p className="num text-sm font-medium text-indigo">
+                        {m.dno_master?.dno_number ?? m.dno_id.slice(0, 8)} ·{' '}
+                        {m.size}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {m.date} · {m.type}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={[
+                          'num text-sm font-semibold',
+                          m.type === 'IN' ? 'text-[#2f6b4f]' : 'text-[#9b2c2c]',
+                        ].join(' ')}
+                      >
+                        {m.type === 'IN' ? '+' : '−'}
+                        {m.qty}
+                      </p>
+                      <p className="text-[0.65rem] text-muted">
+                        bal {m.balance_after}
+                      </p>
+                    </div>
+                  </button>
                 </li>
               ))
             )}
@@ -403,13 +450,18 @@ function StatCard({
   label,
   value,
   hint,
+  to,
 }: {
   label: string
   value: string
   hint?: string
+  to: string
 }) {
   return (
-    <div className="panel panel-accent !px-3 !py-3 animate-[rise-in_360ms_ease-out]">
+    <Link
+      to={to}
+      className="panel panel-accent !px-3 !py-3 animate-[rise-in_360ms_ease-out] block"
+    >
       <p className="text-[0.65rem] uppercase tracking-wide text-muted">
         {label}
       </p>
@@ -417,6 +469,6 @@ function StatCard({
         {value}
       </p>
       {hint ? <p className="mt-0.5 text-[0.65rem] text-muted">{hint}</p> : null}
-    </div>
+    </Link>
   )
 }

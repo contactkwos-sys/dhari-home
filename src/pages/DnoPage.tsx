@@ -12,8 +12,10 @@ import {
   formatMoney,
   uploadDnoPhoto,
 } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { photoUploadErrorMessage } from '../lib/compressImage'
 import { enrichMovementsWithBalance } from '../lib/dashboard'
+import { dnoSerial } from '../lib/dnoNumber'
 import type {
   DnoMaster,
   DnoSize,
@@ -23,6 +25,7 @@ import type {
 import { SIZES, errorMessage } from '../types'
 
 export function DnoPage() {
+  const { isOwner } = useAuth()
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
   const [rows, setRows] = useState<DnoMaster[]>([])
@@ -59,6 +62,18 @@ export function DnoPage() {
   }, [])
 
   useEffect(() => {
+    if (!isOwner) {
+      // Warehouse: read-only design detail from warehouse links only
+      if (search.get('add') === '1') {
+        navigate('/stock', { replace: true })
+        return
+      }
+      const id = search.get('id')
+      if (!id) {
+        navigate('/stock', { replace: true })
+        return
+      }
+    }
     if (search.get('add') === '1') {
       setShowAdd(true)
       setEditing(null)
@@ -71,14 +86,20 @@ export function DnoPage() {
       setShowAdd(false)
       setEditing(null)
     }
-  }, [search, rows])
+  }, [search, rows, isOwner, navigate])
 
   function clearQuery() {
     if ([...search.keys()].length) setSearch({}, { replace: true })
   }
 
+  function goBackFromDetail() {
+    setDetail(null)
+    clearQuery()
+    if (!isOwner) navigate('/stock')
+  }
+
   async function onPhotoPick(dno: DnoMaster, file: File | undefined) {
-    if (!file) return
+    if (!isOwner || !file) return
     setUploadingId(dno.id)
     setError(null)
     try {
@@ -97,7 +118,7 @@ export function DnoPage() {
   }
 
   async function onClearPhoto(dno: DnoMaster) {
-    if (!dno.photo_url) return
+    if (!isOwner || !dno.photo_url) return
     if (!window.confirm(`Remove photo for ${dno.dno_number}?`)) return
     setError(null)
     try {
@@ -110,6 +131,7 @@ export function DnoPage() {
   }
 
   async function onDeleteDno(dno: DnoMaster) {
+    if (!isOwner) return
     if (
       !window.confirm(
         `Delete ${dno.dno_number}? Related stock movements will also be removed.`,
@@ -135,41 +157,53 @@ export function DnoPage() {
     return (
       <DnoDetail
         dno={detail}
+        readOnly={!isOwner}
         uploading={uploadingId === detail.id}
-        onBack={() => {
-          setDetail(null)
-          clearQuery()
-        }}
+        onBack={goBackFromDetail}
         onEdit={() => {
+          if (!isOwner) return
           setEditing(detail)
           setShowAdd(false)
         }}
         onDelete={() => void onDeleteDno(detail)}
-        onPhoto={() => fileRefs.current[detail.id]?.click()}
+        onPhoto={() => {
+          if (!isOwner) return
+          fileRefs.current[detail.id]?.click()
+        }}
         onClearPhoto={() => void onClearPhoto(detail)}
         fileInput={
-          <input
-            ref={(el) => {
-              fileRefs.current[detail.id] = el
-            }}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              void onPhotoPick(detail, e.target.files?.[0])
-              e.target.value = ''
-            }}
-          />
+          isOwner ? (
+            <input
+              ref={(el) => {
+                fileRefs.current[detail.id] = el
+              }}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void onPhotoPick(detail, e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+          ) : null
         }
       />
+    )
+  }
+
+  if (!isOwner) {
+    return (
+      <div className="page">
+        <p className="text-sm text-muted">Opening design…</p>
+      </div>
     )
   }
 
   return (
     <div className="page">
       <PageHeader
-        title="DNO Master"
-        subtitle="Design numbers, photos & rates"
+        title="DN Master"
+        subtitle="Short DNs — 5 foot, 7 foot, All over, quality"
         action={
           <button
             type="button"
@@ -192,33 +226,44 @@ export function DnoPage() {
       {(showAdd || editing) && (
         <AddDesignForm
           initial={editing}
+          existingDnos={rows}
           onCancel={() => {
             setShowAdd(false)
             setEditing(null)
             clearQuery()
           }}
-          onSaved={async (_dno, photoWarning) => {
+          onSaved={async (_dno, opts) => {
+            if (opts?.addNext) {
+              await load()
+              return
+            }
             setShowAdd(false)
             setEditing(null)
             clearQuery()
             await load()
-            if (photoWarning) {
-              setError(
-                `${photoWarning}. Design was saved — tap the photo to retry.`,
-              )
+            if (opts?.warning) {
+              setError(opts.warning)
             }
           }}
         />
       )}
 
       <ul className="mt-2 space-y-3">
+        {rows.length === 0 && !loading ? (
+          <li className="text-sm text-muted">
+            No DNs yet. Add one, then Save & next for DN 2, DN 3, …
+          </li>
+        ) : null}
         {rows.map((dno) => (
           <li key={dno.id} className="panel panel-accent flex gap-3">
             <button
               type="button"
               className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark"
-              onClick={() => fileRefs.current[dno.id]?.click()}
-              aria-label={`Change photo for ${dno.dno_number}`}
+              onClick={() => {
+                setDetail(dno)
+                setSearch({ id: dno.id }, { replace: true })
+              }}
+              aria-label={`Open design ${dno.dno_number}`}
             >
               {dno.photo_url ? (
                 <img
@@ -300,6 +345,13 @@ export function DnoPage() {
                 </button>
                 <button
                   type="button"
+                  className="btn btn-ghost !px-2.5 !py-1 text-xs"
+                  onClick={() => fileRefs.current[dno.id]?.click()}
+                >
+                  {dno.photo_url ? 'Change photo' : 'Add photo'}
+                </button>
+                <button
+                  type="button"
                   className="btn btn-ghost !px-2.5 !py-1 text-xs text-[#9b2c2c]"
                   onClick={() => void onDeleteDno(dno)}
                 >
@@ -325,6 +377,7 @@ export function DnoPage() {
 
 function DnoDetail({
   dno,
+  readOnly = false,
   uploading,
   onBack,
   onEdit,
@@ -334,6 +387,7 @@ function DnoDetail({
   fileInput,
 }: {
   dno: DnoMaster
+  readOnly?: boolean
   uploading: boolean
   onBack: () => void
   onEdit: () => void
@@ -347,6 +401,7 @@ function DnoDetail({
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const serial = dnoSerial(dno.dno_number)
 
   useEffect(() => {
     let cancelled = false
@@ -397,8 +452,6 @@ function DnoDetail({
     }
     for (const size of SIZES) {
       const row = map.get(size)!
-      // Opening = first chronological balance basis: inbound before any out, simplified as
-      // opening stock implied 0; show inbound as "In"
       row.opening = 0
     }
     return SIZES.map((size) => ({ size, ...map.get(size)! }))
@@ -409,52 +462,75 @@ function DnoDetail({
     [movements],
   )
 
+  const manufacturerLabel =
+    dno.manufacturer === 'Other'
+      ? dno.other_manufacturer_name || 'Other'
+      : dno.manufacturer
+
   return (
     <div className="page animate-[rise-in_280ms_ease-out]">
       <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" className="btn btn-ghost text-sm" onClick={onBack}>
           ← Back
         </button>
-        <div className="flex gap-2">
-          <button type="button" className="btn btn-primary text-sm" onClick={onEdit}>
-            Edit
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost text-sm text-[#9b2c2c]"
-            onClick={onDelete}
-          >
-            Delete
-          </button>
-        </div>
+        {!readOnly ? (
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-primary text-sm" onClick={onEdit}>
+              Edit
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost text-sm text-[#9b2c2c]"
+              onClick={onDelete}
+            >
+              Delete
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <article className="panel panel-accent overflow-hidden !p-0">
-        <button
-          type="button"
-          className="relative block w-full bg-ivory-dark"
-          onClick={onPhoto}
-          aria-label={`Upload photo for ${dno.dno_number}`}
-        >
-          {dno.photo_url ? (
-            <img
-              src={dno.photo_url}
-              alt={dno.dno_number}
-              className="aspect-[4/3] w-full object-cover lg:aspect-[21/9]"
-            />
-          ) : (
-            <div className="flex aspect-[4/3] w-full items-center justify-center text-sm text-muted lg:aspect-[21/9]">
-              Tap to add photo
-            </div>
-          )}
-          {uploading ? (
-            <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white">
-              Uploading…
-            </span>
-          ) : null}
-        </button>
+        {readOnly ? (
+          <div className="relative block w-full bg-ivory-dark">
+            {dno.photo_url ? (
+              <img
+                src={dno.photo_url}
+                alt={dno.dno_number}
+                className="aspect-[16/9] w-full object-cover lg:aspect-[21/9]"
+              />
+            ) : (
+              <div className="flex aspect-[16/9] w-full items-center justify-center text-sm text-muted lg:aspect-[21/9]">
+                No photo
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="relative block w-full bg-ivory-dark"
+            onClick={onPhoto}
+            aria-label={`Upload photo for ${dno.dno_number}`}
+          >
+            {dno.photo_url ? (
+              <img
+                src={dno.photo_url}
+                alt={dno.dno_number}
+                className="aspect-[16/9] w-full object-cover lg:aspect-[21/9]"
+              />
+            ) : (
+              <div className="flex aspect-[16/9] w-full items-center justify-center text-sm text-muted lg:aspect-[21/9]">
+                Tap to add photo
+              </div>
+            )}
+            {uploading ? (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white">
+                Uploading…
+              </span>
+            ) : null}
+          </button>
+        )}
         {fileInput}
-        {dno.photo_url ? (
+        {!readOnly && dno.photo_url ? (
           <div className="flex justify-end border-b border-[rgba(31,59,87,0.08)] px-4 py-2">
             <button
               type="button"
@@ -468,33 +544,32 @@ function DnoDetail({
 
         <div className="space-y-4 px-4 py-4">
           <div>
-            <p className="num text-sm tracking-wide text-turmeric">
-              {dno.dno_number}
-            </p>
+            {serial != null ? (
+              <p className="text-[0.65rem] font-medium uppercase tracking-[0.14em] text-turmeric">
+                Serial {serial}
+              </p>
+            ) : null}
             <h1 className="font-display text-2xl font-semibold text-indigo">
-              {dno.category || 'Uncategorized'}
+              {dno.dno_number}
             </h1>
             <p className="mt-1 text-sm text-muted">
-              {dno.manufacturer === 'Other'
-                ? dno.other_manufacturer_name || 'Other'
-                : dno.manufacturer}
+              {dno.category || 'Uncategorized'}
+              {manufacturerLabel ? ` · ${manufacturerLabel}` : ''}
             </p>
           </div>
 
           <StripeBar />
 
-          <dl className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
-            <DetailField label="Category" value={dno.category || '—'} />
+          <dl className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-3">
+            <DetailField label="Internal design ID" value={dno.dno_number} />
+            <DetailField
+              label="Internal serial"
+              value={serial != null ? String(serial) : '—'}
+            />
+            <DetailField label="System / quality" value={dno.category || '—'} />
+            <DetailField label="Manufacturer" value={manufacturerLabel} />
             <DetailField label="HSN" value={dno.hsn_code || '—'} />
             <DetailField label="GST" value={`${dno.gst_rate}%`} />
-            <DetailField
-              label="Manufacturer"
-              value={
-                dno.manufacturer === 'Other'
-                  ? dno.other_manufacturer_name || 'Other'
-                  : dno.manufacturer
-              }
-            />
             <DetailField label="Purchase rate" value={formatMoney(dno.purchase_rate)} />
             <DetailField
               label="Low stock alert"

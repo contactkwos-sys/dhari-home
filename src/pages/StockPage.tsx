@@ -2,23 +2,26 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AddDesignForm } from '../components/AddDesignForm'
+import { DesignFullView } from '../components/DesignFullView'
+import { DnoPicker } from '../components/DnoPicker'
 import { PageHeader } from '../components/PageHeader'
+import { SizePiecesFields } from '../components/SizePiecesFields'
 import {
-  addStockIn,
+  addStockInForSizes,
   deleteStockMovement,
   fetchDnos,
   fetchStockMovements,
   fetchStockRows,
+  parsePieceCount,
   todayISO,
   updateStockMovement,
 } from '../lib/api'
-import { useAuth } from '../lib/auth'
 import { useLowStock } from '../lib/lowStock'
+import { compareDnoNumbers } from '../lib/dnoNumber'
 import type { DnoMaster, DnoSize, MovementType, StockMovement, StockRow } from '../types'
-import { SIZES, errorMessage } from '../types'
+import { SIZES, emptySizeQtyMap, errorMessage, type SizeQtyMap } from '../types'
 
 export function StockPage() {
-  const { isOwner } = useAuth()
   const { refresh: refreshLowStock } = useLowStock()
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
@@ -30,6 +33,11 @@ export function StockPage() {
   const [showForm, setShowForm] = useState(false)
   const [showDesign, setShowDesign] = useState(false)
   const [editing, setEditing] = useState<StockMovement | null>(null)
+  const [viewing, setViewing] = useState<{
+    dno: DnoMaster
+    size: DnoSize
+    balance: number
+  } | null>(null)
   const lowOnly = search.get('low') === '1'
 
   useEffect(() => {
@@ -73,6 +81,18 @@ export function StockPage() {
     return rows.filter((r) => r.balance <= (r.dno.low_stock_threshold ?? 10))
   }, [rows, lowOnly])
 
+  const sortedLedger = useMemo(() => {
+    return [...ledger].sort((a, b) => {
+      const aNum = a.dno_master?.dno_number ?? ''
+      const bNum = b.dno_master?.dno_number ?? ''
+      const byDno = compareDnoNumbers(aNum, bNum)
+      if (byDno) return byDno
+      const byDate = (b.date || '').localeCompare(a.date || '')
+      if (byDate) return byDate
+      return b.id.localeCompare(a.id)
+    })
+  }, [ledger])
+
   function clearQuery() {
     setSearch({}, { replace: true })
   }
@@ -94,7 +114,7 @@ export function StockPage() {
     <div className="page">
       <PageHeader
         title="Warehouse"
-        subtitle="Balances per DNO + size"
+        subtitle="Add more pieces to the same DN"
         action={
           <div className="flex flex-wrap justify-end gap-2">
             <button
@@ -139,18 +159,21 @@ export function StockPage() {
 
       {showDesign ? (
         <AddDesignForm
+          existingDnos={dnos}
           onCancel={() => {
             setShowDesign(false)
             clearQuery()
           }}
-          onSaved={async (_dno, photoWarning) => {
+          onSaved={async (_dno, opts) => {
+            if (opts?.addNext) {
+              await load()
+              return
+            }
             setShowDesign(false)
             clearQuery()
             await load()
-            if (photoWarning) {
-              setError(
-                `${photoWarning}. Design was saved — open DNO Master to retry the photo.`,
-              )
+            if (opts?.warning) {
+              setError(opts.warning)
             }
           }}
         />
@@ -208,7 +231,7 @@ export function StockPage() {
                   <td colSpan={4} className="px-3 py-3 text-muted">
                     {lowOnly
                       ? 'No low-stock rows.'
-                      : 'No stock yet — use Add design, then Add stock.'}
+                      : 'No stock yet — add a design with pieces per size, or use Add stock.'}
                   </td>
                 </tr>
               ) : (
@@ -221,7 +244,18 @@ export function StockPage() {
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md bg-ivory-dark">
+                          <button
+                            type="button"
+                            className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ivory-dark ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-turmeric"
+                            aria-label={`View design ${r.dno.dno_number}`}
+                            onClick={() =>
+                              setViewing({
+                                dno: r.dno,
+                                size: r.size,
+                                balance: r.balance,
+                              })
+                            }
+                          >
                             {r.dno.photo_url ? (
                               <img
                                 src={r.dno.photo_url}
@@ -233,20 +267,24 @@ export function StockPage() {
                                 —
                               </span>
                             )}
-                          </div>
+                          </button>
                           <div className="min-w-0">
-                            {isOwner ? (
-                              <Link
-                                to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
-                                className="num font-medium text-indigo hover:underline"
-                              >
-                                {r.dno.dno_number}
-                              </Link>
-                            ) : (
-                              <div className="num font-medium text-indigo">
-                                {r.dno.dno_number}
-                              </div>
-                            )}
+                            <button
+                              type="button"
+                              className="num font-medium text-indigo hover:underline"
+                              onClick={() =>
+                                setViewing({
+                                  dno: r.dno,
+                                  size: r.size,
+                                  balance: r.balance,
+                                })
+                              }
+                            >
+                              {r.dno.dno_number}
+                            </button>
+                            <div className="truncate text-xs text-ink">
+                              {r.dno.category || 'No system / quality'}
+                            </div>
                             <div className="text-xs text-muted">{r.size}</div>
                           </div>
                         </div>
@@ -284,17 +322,26 @@ export function StockPage() {
           Movement ledger
         </h2>
         <ul className="space-y-2">
-          {ledger.length === 0 ? (
+          {sortedLedger.length === 0 ? (
             <li className="text-sm text-muted">No movements yet.</li>
           ) : (
-            ledger.map((m) => (
+            sortedLedger.map((m) => (
               <li
                 key={m.id}
                 className="flex items-center justify-between gap-2 rounded-lg border border-[rgba(31,59,87,0.08)] bg-white/50 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="num text-sm font-medium text-indigo">
+                  <Link
+                    to={`/dno?id=${encodeURIComponent(m.dno_id)}`}
+                    className="num text-sm font-medium text-indigo hover:underline"
+                  >
                     {m.dno_master?.dno_number ?? m.dno_id.slice(0, 8)}
+                  </Link>
+                  <p className="truncate text-xs text-ink">
+                    {dnos.find((d) => d.id === m.dno_id)?.category || '—'}
+                  </p>
+                  <p className="truncate text-xs text-ink">
+                    {dnos.find((d) => d.id === m.dno_id)?.category || '—'}
                   </p>
                   <p className="text-xs text-muted">
                     {m.size} · {m.date}
@@ -340,6 +387,15 @@ export function StockPage() {
           )}
         </ul>
       </section>
+
+      {viewing ? (
+        <DesignFullView
+          dno={viewing.dno}
+          size={viewing.size}
+          balance={viewing.balance}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -356,26 +412,30 @@ function AddStockForm({
   onAddDesign: () => void
 }) {
   const [dno_id, setDnoId] = useState(dnos[0]?.id ?? '')
-  const [size, setSize] = useState<DnoSize>('5ft x 4ft')
-  const [qty, setQty] = useState('')
+  const [qtyBySize, setQtyBySize] = useState<SizeQtyMap>(emptySizeQtyMap())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const selected = dnos.find((d) => d.id === dno_id)
+  function setSizeQty(size: DnoSize, value: string) {
+    setQtyBySize((prev) => ({ ...prev, [size]: value }))
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setErr(null)
     try {
-      const n = Number(qty)
-      if (!Number.isFinite(n) || n <= 0) {
-        throw new Error('Enter a quantity greater than 0')
+      const pieces: Partial<Record<DnoSize, number>> = {}
+      for (const size of SIZES) {
+        pieces[size] = parsePieceCount(qtyBySize[size], size)
       }
-      await addStockIn({
+      const total = SIZES.reduce((sum, size) => sum + (pieces[size] ?? 0), 0)
+      if (total <= 0) {
+        throw new Error('Enter pieces for at least one size (5ft x 4ft or 7ft x 4ft)')
+      }
+      await addStockInForSizes({
         dno_id,
-        size,
-        qty: n,
+        qtyBySize: pieces,
         date: todayISO(),
         note: 'Purchase / receipt',
       })
@@ -391,7 +451,7 @@ function AddStockForm({
     <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">Add stock</h2>
       <p className="text-xs text-muted">
-        Adds an IN movement — balances accumulate per DNO + size.
+        Pick an existing DN and add more pieces. Balances update In / Out / Bal.
       </p>
       {dnos.length === 0 ? (
         <div className="rounded-lg bg-indigo/5 px-3 py-3 text-sm">
@@ -406,71 +466,19 @@ function AddStockForm({
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          <div className="field col-span-2">
-            <label htmlFor="mv_dno">Design (DNO)</label>
-            <select
-              id="mv_dno"
-              required
-              value={dno_id}
-              onChange={(e) => setDnoId(e.target.value)}
-            >
-              {dnos.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.dno_number}
-                  {d.category ? ` · ${d.category}` : ''}
-                </option>
-              ))}
-            </select>
-            {selected ? (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="h-12 w-12 overflow-hidden rounded-md bg-ivory-dark">
-                  {selected.photo_url ? (
-                    <img
-                      src={selected.photo_url}
-                      alt={selected.dno_number}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-[0.55rem] text-muted">
-                      No photo
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted">
-                  {selected.category || 'Uncategorized'}
-                </p>
-              </div>
-            ) : null}
-          </div>
-          <div className="field">
-            <label htmlFor="mv_size">Size</label>
-            <select
-              id="mv_size"
-              required
-              value={size}
-              onChange={(e) => setSize(e.target.value as DnoSize)}
-            >
-              {SIZES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="mv_qty">Quantity</label>
-            <input
-              id="mv_qty"
-              type="number"
-              min="1"
-              step="1"
-              required
-              value={qty}
-              placeholder="Enter qty"
-              onChange={(e) => setQty(e.target.value)}
-              className="num"
-            />
-          </div>
+          <DnoPicker
+            id="mv_dno"
+            label="DN number"
+            dnos={dnos}
+            value={dno_id}
+            onChange={setDnoId}
+          />
+          <SizePiecesFields
+            idPrefix="add_stock_qty"
+            values={qtyBySize}
+            onChange={setSizeQty}
+            hint="Enter how many pieces for each size. Leave a size blank for 0."
+          />
         </div>
       )}
       {err ? <p className="err whitespace-pre-wrap">{err}</p> : null}

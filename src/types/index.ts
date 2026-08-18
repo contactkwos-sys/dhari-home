@@ -1,5 +1,19 @@
 export type Manufacturer = 'Jaisal Fashion Weave' | 'Other'
 
+/** Pattern / drop systems shown in DN Master. */
+export const DESIGN_SYSTEM_OPTIONS = ['5 foot', '7 foot', 'All over'] as const
+export type DesignSystem = (typeof DESIGN_SYSTEM_OPTIONS)[number]
+
+/** Built-in quality names. Extra names typed under Others are collected from saved DNs. */
+export const DESIGN_QUALITY_PRESETS = ['Bright jacquard'] as const
+export type DesignQuality = (typeof DESIGN_QUALITY_PRESETS)[number]
+
+/** All built-in System / quality dropdown values (excludes Others). */
+export const DESIGN_SYSTEMS: readonly string[] = [
+  ...DESIGN_SYSTEM_OPTIONS,
+  ...DESIGN_QUALITY_PRESETS,
+]
+
 export type Platform =
   | 'Flipkart'
   | 'Amazon'
@@ -54,10 +68,38 @@ export interface Order {
   payment_status: PaymentStatus
   invoice_no: string | null
   size: DnoSize
+  gate_pass_signature_url?: string | null
+  gate_pass_issued_at?: string | null
+  gate_pass_received_at?: string | null
   dno_master?: Pick<
     DnoMaster,
     'dno_number' | 'hsn_code' | 'gst_rate' | 'category' | 'photo_url'
   > | null
+}
+
+/** QR / barcode payload prefix for gate-pass slips. */
+export const GATE_PASS_QR_PREFIX = 'DHARI-GP:'
+
+export function encodeGatePassQr(orderId: string): string {
+  return `${GATE_PASS_QR_PREFIX}${orderId}`
+}
+
+export function parseGatePassQr(raw: string): string | null {
+  const text = raw.trim()
+  if (!text) return null
+  if (text.startsWith(GATE_PASS_QR_PREFIX)) {
+    const id = text.slice(GATE_PASS_QR_PREFIX.length).trim()
+    return id || null
+  }
+  // Accept bare UUID if staff scan a plain order id
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      text,
+    )
+  ) {
+    return text
+  }
+  return null
 }
 
 export interface StockRow {
@@ -92,6 +134,41 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 ]
 
 export const SIZES: DnoSize[] = ['5ft x 4ft', '7ft x 4ft']
+
+/** Custom System / quality names already used on other DNs, for the dropdown. */
+export function extraDesignSystems(
+  dnos: Pick<DnoMaster, 'category'>[],
+): string[] {
+  const seen = new Set(DESIGN_SYSTEMS.map((s) => s.toLowerCase()))
+  const extras: string[] = []
+  for (const d of dnos) {
+    const c = d.category?.trim()
+    if (!c) continue
+    const key = c.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    extras.push(c)
+  }
+  extras.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+  return extras
+}
+
+/** Match a saved category to a built-in or extra dropdown value (case-insensitive). */
+export function matchDesignSystem(
+  category: string | null | undefined,
+  extras: readonly string[] = [],
+): string | null {
+  const raw = category?.trim()
+  if (!raw) return null
+  const all = [...DESIGN_SYSTEMS, ...extras]
+  return all.find((s) => s.toLowerCase() === raw.toLowerCase()) ?? null
+}
+
+export type SizeQtyMap = Record<DnoSize, string>
+
+export function emptySizeQtyMap(): SizeQtyMap {
+  return { '5ft x 4ft': '', '7ft x 4ft': '' }
+}
 
 export const APP_ROLES: AppRole[] = ['Owner', 'Warehouse']
 

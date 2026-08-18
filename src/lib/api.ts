@@ -16,6 +16,8 @@ import type {
   StockMovement,
   StockRow,
 } from '../types'
+import { SIZES, errorMessage } from '../types'
+import { compareDnoNumbers, normalizeDnoNumber, sortDnos } from './dnoNumber'
 
 export async function fetchDnos(): Promise<DnoMaster[]> {
   const { data, error } = await supabase
@@ -23,7 +25,7 @@ export async function fetchDnos(): Promise<DnoMaster[]> {
     .select('*')
     .order('dno_number')
   if (error) throw error
-  return (data ?? []).map(normalizeDno)
+  return sortDnos((data ?? []).map(normalizeDno))
 }
 
 function normalizeDno(row: DnoMaster): DnoMaster {
@@ -36,7 +38,7 @@ function normalizeDno(row: DnoMaster): DnoMaster {
 
 export async function updateDno(
   id: string,
-  patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
+  patch: Partial<Omit<DnoMaster, 'id'>>,
 ): Promise<DnoMaster> {
   const payload = sanitizeDnoPatch(patch)
   const { data, error } = await supabase
@@ -45,7 +47,12 @@ export async function updateDno(
     .eq('id', id)
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('This DN number is already used by another design.')
+    }
+    throw error
+  }
   if (!data) throw new Error('Update returned no row — check RLS UPDATE/SELECT on dno_master')
   return normalizeDno(data)
 }
@@ -62,8 +69,8 @@ export async function createDno(input: {
   photo_url?: string | null
   low_stock_threshold?: number
 }): Promise<DnoMaster> {
-  const dno_number = input.dno_number.trim()
-  if (!dno_number) throw new Error('DNO number is required')
+  const dno_number = normalizeDnoNumber(input.dno_number)
+  if (!dno_number) throw new Error('DN number is required')
 
   const row = {
     dno_number,
@@ -96,15 +103,27 @@ export async function createDno(input: {
     .insert(row)
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error(
+        'This DN already exists. Open Warehouse → Add stock to add more pieces to the same DN.',
+      )
+    }
+    throw error
+  }
   if (!data) throw new Error('Insert returned no row — check RLS INSERT/SELECT on dno_master')
   return normalizeDno(data)
 }
 
 function sanitizeDnoPatch(
-  patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
-): Partial<Omit<DnoMaster, 'id' | 'dno_number'>> {
-  const out: Partial<Omit<DnoMaster, 'id' | 'dno_number'>> = { ...patch }
+  patch: Partial<Omit<DnoMaster, 'id'>>,
+): Partial<Omit<DnoMaster, 'id'>> {
+  const out: Partial<Omit<DnoMaster, 'id'>> = { ...patch }
+  if ('dno_number' in out) {
+    const n = normalizeDnoNumber(out.dno_number ?? '')
+    if (!n) throw new Error('DN number is required')
+    out.dno_number = n
+  }
   if ('category' in out) out.category = out.category?.trim() || null
   if ('hsn_code' in out) out.hsn_code = out.hsn_code?.trim() || null
   if ('other_manufacturer_name' in out) {
@@ -301,6 +320,52 @@ export async function addStockIn(input: {
   return data as StockMovement
 }
 
+export function parsePieceCount(raw: string, label: string): number {
+  const t = raw.trim()
+  if (t === '') return 0
+  const n = Math.floor(Number(t))
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${label} pieces must be 0 or more`)
+  }
+  return n
+}
+
+/** Create IN movements for each size that has a positive piece count. */
+export async function addStockInForSizes(input: {
+  dno_id: string
+  qtyBySize: Partial<Record<DnoSize, number>>
+  date?: string
+  note?: string | null
+}): Promise<StockMovement[]> {
+  const created: StockMovement[] = []
+  const errors: string[] = []
+  for (const size of SIZES) {
+    const qty = Math.floor(Number(input.qtyBySize[size] ?? 0))
+    if (!qty) continue
+    try {
+      created.push(
+        await addStockIn({
+          dno_id: input.dno_id,
+          size,
+          qty,
+          date: input.date,
+          note: input.note,
+        }),
+      )
+    } catch (e) {
+      errors.push(`${size}: ${errorMessage(e, 'Failed')}`)
+    }
+  }
+  if (errors.length) {
+    throw new Error(
+      created.length
+        ? `Some sizes saved, others failed — ${errors.join('; ')}`
+        : errors.join('; '),
+    )
+  }
+  return created
+}
+
 export async function getStockBalance(
   dnoId: string,
   size: DnoSize,
@@ -311,6 +376,15 @@ export async function getStockBalance(
   })
   if (error) throw error
   return Number(data ?? 0)
+}
+
+export async function getStockBalancesBySize(
+  dnoId: string,
+): Promise<Record<DnoSize, number>> {
+  const pairs = await Promise.all(
+    SIZES.map(async (size) => [size, await getStockBalance(dnoId, size)] as const),
+  )
+  return Object.fromEntries(pairs) as Record<DnoSize, number>
 }
 
 export async function fetchStockRows(): Promise<StockRow[]> {
@@ -341,7 +415,7 @@ export async function fetchStockRows(): Promise<StockRow[]> {
   }
 
   rows.sort((a, b) => {
-    const byDno = a.dno.dno_number.localeCompare(b.dno.dno_number)
+    const byDno = compareDnoNumbers(a.dno.dno_number, b.dno.dno_number)
     if (byDno !== 0) return byDno
     return a.size.localeCompare(b.size)
   })
@@ -358,7 +432,7 @@ export async function fetchLowStockItems(): Promise<LowStockItem[]> {
       balance: r.balance,
       threshold: r.dno.low_stock_threshold ?? 10,
     }))
-    .sort((a, b) => a.balance - b.balance || a.dno.dno_number.localeCompare(b.dno.dno_number))
+    .sort((a, b) => a.balance - b.balance || compareDnoNumbers(a.dno.dno_number, b.dno.dno_number))
 }
 
 export async function fetchOrders(): Promise<Order[]> {
@@ -402,6 +476,63 @@ export async function createOrder(input: {
     p_size: input.size,
   })
   if (error) throw error
+  return data as Order
+}
+
+export async function fetchOrderById(id: string): Promise<Order | null> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return (data as Order | null) ?? null
+}
+
+/** Upload courier signature PNG and mark gate pass as issued. */
+export async function issueGatePass(
+  orderId: string,
+  signatureBlob: Blob,
+): Promise<Order> {
+  const path = `${orderId}/${Date.now()}.png`
+  const { error: uploadError } = await supabase.storage
+    .from('gate-pass-signatures')
+    .upload(path, signatureBlob, {
+      upsert: true,
+      contentType: 'image/png',
+    })
+  if (uploadError) throw uploadError
+
+  const { data: urlData } = supabase.storage
+    .from('gate-pass-signatures')
+    .getPublicUrl(path)
+
+  const issuedAt = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('orders')
+    .update({
+      gate_pass_signature_url: urlData.publicUrl,
+      gate_pass_issued_at: issuedAt,
+    })
+    .eq('id', orderId)
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
+    .single()
+  if (error) throw error
+  if (!data) throw new Error('Gate pass update returned no row')
+  return data as Order
+}
+
+/** Mark a returned gate-pass slip as received (scan confirmation). */
+export async function markGatePassReceived(orderId: string): Promise<Order> {
+  const receivedAt = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ gate_pass_received_at: receivedAt })
+    .eq('id', orderId)
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
+    .single()
+  if (error) throw error
+  if (!data) throw new Error('Gate pass receive update returned no row')
   return data as Order
 }
 

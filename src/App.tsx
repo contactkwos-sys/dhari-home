@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AppFooter } from './components/AppFooter'
 import { AppHeader } from './components/AppHeader'
 import { BottomNav, RoleGuard } from './components/BottomNav'
 import { SideNav } from './components/SideNav'
@@ -48,7 +49,7 @@ function AppRoutes() {
           <Route
             path="/dno"
             element={
-              <RoleGuard allow={['Owner']} fallback={home}>
+              <RoleGuard allow={['Owner', 'Warehouse']} fallback={home}>
                 <DnoPage />
               </RoleGuard>
             }
@@ -87,6 +88,7 @@ function AppRoutes() {
           />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
+        <AppFooter />
         <BottomNav />
       </div>
     </>

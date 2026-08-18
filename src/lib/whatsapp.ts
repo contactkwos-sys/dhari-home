@@ -1,4 +1,5 @@
 import type { DnoSize, Platform } from '../types'
+import { DEFAULT_STAFF_WHATSAPP_E164 } from './support'
 
 const WAREHOUSE_WA_KEY = 'dhari_warehouse_wa'
 
@@ -9,14 +10,23 @@ export type PackDispatchPayload = {
   platform: Platform
   platformOrderId?: string | null
   buyerName?: string | null
+  /** Public Supabase Storage URL for the DN design photo (no re-upload). */
+  photoUrl?: string | null
 }
 
-/** Digits-only phone for wa.me (optional country code, e.g. 9198…). */
+/**
+ * Digits-only phone for wa.me (with country code, e.g. 9198…).
+ * Defaults to staff packing number when not overridden on this device.
+ */
 export function getWarehouseWhatsAppPhone(): string {
   try {
-    return (localStorage.getItem(WAREHOUSE_WA_KEY) ?? '').replace(/\D/g, '')
+    const stored = (localStorage.getItem(WAREHOUSE_WA_KEY) ?? '').replace(
+      /\D/g,
+      '',
+    )
+    return stored || DEFAULT_STAFF_WHATSAPP_E164
   } catch {
-    return ''
+    return DEFAULT_STAFF_WHATSAPP_E164
   }
 }
 
@@ -34,7 +44,7 @@ export function buildPackDispatchMessage(p: PackDispatchPayload): string {
   const lines = [
     'Pack for dispatch',
     '',
-    `Design number: ${p.dnoNumber}`,
+    `DN: ${p.dnoNumber}`,
     `Size (feet): ${p.size}`,
     `Pieces: ${p.pieces}`,
     `Platform: ${p.platform}`,
@@ -44,6 +54,9 @@ export function buildPackDispatchMessage(p: PackDispatchPayload): string {
   }
   if (p.buyerName?.trim()) {
     lines.push(`Buyer: ${p.buyerName.trim()}`)
+  }
+  if (p.photoUrl?.trim()) {
+    lines.push('', `Design photo: ${p.photoUrl.trim()}`)
   }
   lines.push('', 'Please pack this for marketplace dispatch.')
   return lines.join('\n')
