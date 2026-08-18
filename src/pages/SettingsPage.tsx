@@ -3,6 +3,11 @@ import type { FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { resetRolePin } from '../lib/api'
 import {
+  staffSupportWhatsAppDisplay,
+  staffSupportWhatsAppHref,
+  getStaffSupportWhatsApp,
+} from '../lib/support'
+import {
   getWarehouseWhatsAppPhone,
   setWarehouseWhatsAppPhone,
 } from '../lib/whatsapp'
@@ -75,9 +80,10 @@ export function SettingsPage() {
           Warehouse WhatsApp
         </h2>
         <p className="text-sm text-muted">
-          Optional. After issuing an order, “Send WhatsApp” opens WhatsApp /
-          WhatsApp Business with design number, size (feet), pieces and
-          platform for packing. Leave blank to choose the chat each time.
+          Optional. After issuing an order, “Send to packing on WhatsApp” opens
+          WhatsApp / WhatsApp Business with design number, size, pieces,
+          platform, and a link to the DN photo for packing. Leave blank to
+          choose the chat each time.
         </p>
         <div className="field">
           <label htmlFor="wa_phone">Phone (with country code)</label>
@@ -151,6 +157,32 @@ export function SettingsPage() {
           {busy ? 'Saving…' : 'Update PIN'}
         </button>
       </form>
+
+      <section className="panel mt-4 space-y-1.5">
+        <h2 className="font-display text-lg text-indigo">About</h2>
+        <p className="text-sm text-muted">
+          Built by KWOS — Powered by Kumaresh Budhia
+        </p>
+        <p className="text-sm text-muted">
+          For any help, WhatsApp:{' '}
+          {staffSupportWhatsAppHref() && getStaffSupportWhatsApp() ? (
+            <a
+              href={staffSupportWhatsAppHref()!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="num text-indigo underline-offset-2 hover:underline"
+            >
+              {staffSupportWhatsAppDisplay()}
+            </a>
+          ) : (
+            <span className="num">{staffSupportWhatsAppDisplay()}</span>
+          )}
+        </p>
+        <p className="text-xs text-muted">
+          Set <span className="num">VITE_STAFF_SUPPORT_WHATSAPP</span> in env when
+          the support number is confirmed.
+        </p>
+      </section>
     </div>
   )
 }

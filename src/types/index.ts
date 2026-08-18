@@ -68,10 +68,38 @@ export interface Order {
   payment_status: PaymentStatus
   invoice_no: string | null
   size: DnoSize
+  gate_pass_signature_url?: string | null
+  gate_pass_issued_at?: string | null
+  gate_pass_received_at?: string | null
   dno_master?: Pick<
     DnoMaster,
     'dno_number' | 'hsn_code' | 'gst_rate' | 'category' | 'photo_url'
   > | null
+}
+
+/** QR / barcode payload prefix for gate-pass slips. */
+export const GATE_PASS_QR_PREFIX = 'DHARI-GP:'
+
+export function encodeGatePassQr(orderId: string): string {
+  return `${GATE_PASS_QR_PREFIX}${orderId}`
+}
+
+export function parseGatePassQr(raw: string): string | null {
+  const text = raw.trim()
+  if (!text) return null
+  if (text.startsWith(GATE_PASS_QR_PREFIX)) {
+    const id = text.slice(GATE_PASS_QR_PREFIX.length).trim()
+    return id || null
+  }
+  // Accept bare UUID if staff scan a plain order id
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      text,
+    )
+  ) {
+    return text
+  }
+  return null
 }
 
 export interface StockRow {

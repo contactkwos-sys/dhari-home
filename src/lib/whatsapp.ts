@@ -9,6 +9,8 @@ export type PackDispatchPayload = {
   platform: Platform
   platformOrderId?: string | null
   buyerName?: string | null
+  /** Public Supabase Storage URL for the DN design photo (no re-upload). */
+  photoUrl?: string | null
 }
 
 /** Digits-only phone for wa.me (optional country code, e.g. 9198…). */
@@ -44,6 +46,9 @@ export function buildPackDispatchMessage(p: PackDispatchPayload): string {
   }
   if (p.buyerName?.trim()) {
     lines.push(`Buyer: ${p.buyerName.trim()}`)
+  }
+  if (p.photoUrl?.trim()) {
+    lines.push('', `Design photo: ${p.photoUrl.trim()}`)
   }
   lines.push('', 'Please pack this for marketplace dispatch.')
   return lines.join('\n')
