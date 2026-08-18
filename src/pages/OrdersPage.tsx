@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
+import { DnoPicker } from '../components/DnoPicker'
 import {
   createOrder,
   fetchDnos,
@@ -67,7 +68,7 @@ export function OrdersPage() {
     <div className="page">
       <PageHeader
         title="Orders"
-        subtitle="Marketplace dispatch"
+        subtitle="Pick DN, see stock, WhatsApp pack"
         action={
           <button
             type="button"
@@ -145,10 +146,13 @@ export function OrdersPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                     <span>
-                      Design{' '}
-                      <span className="num font-medium">
+                      DN{' '}
+                      <Link
+                        to="/stock"
+                        className="num font-medium text-indigo hover:underline"
+                      >
                         {o.dno_master?.dno_number ?? '—'}
-                      </span>
+                      </Link>
                     </span>
                     <span>
                       Size <span className="font-medium">{o.size}</span>
@@ -291,7 +295,7 @@ function OrderForm({
       return
     }
     if (!selected) {
-      setErr('Select a design from the design view.')
+      setErr('Select a DN from the list.')
       return
     }
     setBusy(true)
@@ -331,9 +335,18 @@ function OrderForm({
     <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">Add order</h2>
       <p className="text-xs text-muted">
-        Select a design, issue stock, then notify warehouse on WhatsApp to pack
-        for Flipkart / Amazon / IndiaMART dispatch.
+        Pick DN from the list, check warehouse stock, issue, then WhatsApp /
+        WhatsApp Business to pack.
       </p>
+
+      <DnoPicker
+        id="ord_dno"
+        label="DN number"
+        dnos={dnos}
+        value={dno_id}
+        onChange={setDnoId}
+        viewTo="/stock"
+      />
 
       <div className="rounded-lg bg-indigo/5 px-3 py-2 text-sm">
         Stock for {size}:{' '}
@@ -342,64 +355,6 @@ function OrderForm({
         </span>
         {blocked ? (
           <span className="err ml-2">Not enough stock</span>
-        ) : null}
-      </div>
-
-      <div className="field">
-        <label>Design view</label>
-        {dnos.length === 0 ? (
-          <p className="text-sm text-muted">
-            No designs yet — add one from DNO Master or Warehouse.
-          </p>
-        ) : (
-          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {dnos.map((d) => {
-              const active = d.id === dno_id
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => setDnoId(d.id)}
-                  className={[
-                    'overflow-hidden rounded-lg border text-left transition',
-                    active
-                      ? 'border-indigo ring-2 ring-indigo/30'
-                      : 'border-[rgba(31,59,87,0.12)] hover:border-indigo/40',
-                  ].join(' ')}
-                  aria-pressed={active}
-                >
-                  <div className="aspect-square bg-ivory-dark">
-                    {d.photo_url ? (
-                      <img
-                        src={d.photo_url}
-                        alt={d.dno_number}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-[0.65rem] text-muted">
-                        No photo
-                      </span>
-                    )}
-                  </div>
-                  <div className="px-2 py-1.5">
-                    <p className="num text-xs font-semibold text-indigo">
-                      {d.dno_number}
-                    </p>
-                    <p className="truncate text-[0.65rem] text-muted">
-                      {d.category || 'Uncategorized'}
-                    </p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        )}
-        {selected ? (
-          <p className="mt-2 text-xs text-muted">
-            Selected:{' '}
-            <span className="num font-medium text-ink">{selected.dno_number}</span>
-            {selected.category ? ` · ${selected.category}` : ''}
-          </p>
         ) : null}
       </div>
 
@@ -424,22 +379,6 @@ function OrderForm({
             {PLATFORMS.map((p) => (
               <option key={p} value={p}>
                 {p}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field col-span-2">
-          <label htmlFor="ord_dno">Design (DNO)</label>
-          <select
-            id="ord_dno"
-            required
-            value={dno_id}
-            onChange={(e) => setDnoId(e.target.value)}
-          >
-            {dnos.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.dno_number}
-                {d.category ? ` · ${d.category}` : ''}
               </option>
             ))}
           </select>

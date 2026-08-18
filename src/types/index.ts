@@ -1,5 +1,8 @@
 export type Manufacturer = 'Jaisal Fashion Weave' | 'Other'
 
+/** Product lines: drop-up, drop-down, and DH (short numbers). */
+export type DesignSystem = 'Drop-up' | 'Drop-down' | 'DH'
+
 export type Platform =
   | 'Flipkart'
   | 'Amazon'
@@ -92,6 +95,8 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 ]
 
 export const SIZES: DnoSize[] = ['5ft x 4ft', '7ft x 4ft']
+
+export const DESIGN_SYSTEMS: DesignSystem[] = ['Drop-up', 'Drop-down', 'DH']
 
 export type SizeQtyMap = Record<DnoSize, string>
 

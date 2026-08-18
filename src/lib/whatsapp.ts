@@ -34,7 +34,7 @@ export function buildPackDispatchMessage(p: PackDispatchPayload): string {
   const lines = [
     'Pack for dispatch',
     '',
-    `Design number: ${p.dnoNumber}`,
+    `DN: ${p.dnoNumber}`,
     `Size (feet): ${p.size}`,
     `Pieces: ${p.pieces}`,
     `Platform: ${p.platform}`,
