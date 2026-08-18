@@ -16,6 +16,7 @@ import type {
   StockMovement,
   StockRow,
 } from '../types'
+import { SIZES, errorMessage } from '../types'
 
 export async function fetchDnos(): Promise<DnoMaster[]> {
   const { data, error } = await supabase
@@ -299,6 +300,52 @@ export async function addStockIn(input: {
     )
   }
   return data as StockMovement
+}
+
+export function parsePieceCount(raw: string, label: string): number {
+  const t = raw.trim()
+  if (t === '') return 0
+  const n = Math.floor(Number(t))
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${label} pieces must be 0 or more`)
+  }
+  return n
+}
+
+/** Create IN movements for each size that has a positive piece count. */
+export async function addStockInForSizes(input: {
+  dno_id: string
+  qtyBySize: Partial<Record<DnoSize, number>>
+  date?: string
+  note?: string | null
+}): Promise<StockMovement[]> {
+  const created: StockMovement[] = []
+  const errors: string[] = []
+  for (const size of SIZES) {
+    const qty = Math.floor(Number(input.qtyBySize[size] ?? 0))
+    if (!qty) continue
+    try {
+      created.push(
+        await addStockIn({
+          dno_id: input.dno_id,
+          size,
+          qty,
+          date: input.date,
+          note: input.note,
+        }),
+      )
+    } catch (e) {
+      errors.push(`${size}: ${errorMessage(e, 'Failed')}`)
+    }
+  }
+  if (errors.length) {
+    throw new Error(
+      created.length
+        ? `Some sizes saved, others failed — ${errors.join('; ')}`
+        : errors.join('; '),
+    )
+  }
+  return created
 }
 
 export async function getStockBalance(

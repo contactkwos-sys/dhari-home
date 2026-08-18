@@ -1,8 +1,16 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { createDno, todayISO, updateDno, uploadDnoPhoto } from '../lib/api'
+import {
+  addStockInForSizes,
+  createDno,
+  parsePieceCount,
+  todayISO,
+  updateDno,
+  uploadDnoPhoto,
+} from '../lib/api'
 import { photoUploadErrorMessage } from '../lib/compressImage'
-import type { DnoMaster, Manufacturer } from '../types'
-import { errorMessage } from '../types'
+import type { DnoMaster, DnoSize, Manufacturer } from '../types'
+import { SIZES, emptySizeQtyMap, errorMessage, type SizeQtyMap } from '../types'
+import { SizePiecesFields } from './SizePiecesFields'
 
 export function AddDesignForm({
   initial = null,
@@ -35,8 +43,13 @@ export function AddDesignForm({
   const [photoPreview, setPhotoPreview] = useState<string | null>(
     initial?.photo_url ?? null,
   )
+  const [qtyBySize, setQtyBySize] = useState<SizeQtyMap>(emptySizeQtyMap())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  function setSizeQty(size: DnoSize, value: string) {
+    setQtyBySize((prev) => ({ ...prev, [size]: value }))
+  }
 
   function onPickPhoto(file: File | undefined) {
     if (!file) return
@@ -62,6 +75,10 @@ export function AddDesignForm({
         thresholdRaw === '' ? 10 : Math.max(0, Math.floor(Number(thresholdRaw)))
       if (thresholdRaw !== '' && !Number.isFinite(thresholdNum)) {
         throw new Error('Low stock threshold must be a number')
+      }
+      const pieces: Partial<Record<DnoSize, number>> = {}
+      for (const size of SIZES) {
+        pieces[size] = parsePieceCount(qtyBySize[size], size)
       }
       const fields = {
         manufacturer,
@@ -96,10 +113,27 @@ export function AddDesignForm({
         }
       }
 
+      let stockWarning: string | null = null
+      const hasPieces = SIZES.some((size) => (pieces[size] ?? 0) > 0)
+      if (hasPieces) {
+        try {
+          await addStockInForSizes({
+            dno_id: saved.id,
+            qtyBySize: pieces,
+            date: initial ? todayISO() : date_added,
+            note: initial ? 'Added from design edit' : 'Opening stock',
+          })
+          setQtyBySize(emptySizeQtyMap())
+        } catch (stockErr) {
+          stockWarning = errorMessage(stockErr, 'Could not save pieces per size')
+        }
+      }
+
       await onSaved(saved)
-      if (photoWarning) {
+      const warnings = [photoWarning, stockWarning].filter(Boolean)
+      if (warnings.length) {
         setErr(
-          `${photoWarning}. Design details were saved — use Change photo to retry.`,
+          `${warnings.join(' ')}. Design details were saved — retry photo or add stock if needed.`,
         )
         return
       }
@@ -116,7 +150,8 @@ export function AddDesignForm({
         {initial ? `Edit ${initial.dno_number}` : 'Add design'}
       </h2>
       <p className="text-xs text-muted">
-        Design number (DNO), photo, rates — used in warehouse stock and orders.
+        Design number (DNO), photo, rates, and pieces per size — same as the
+        warehouse stock report.
       </p>
 
       <div className="field">
@@ -265,6 +300,16 @@ export function AddDesignForm({
             className="num"
           />
         </div>
+        <SizePiecesFields
+          idPrefix={initial ? 'edit_design_qty' : 'add_design_qty'}
+          values={qtyBySize}
+          onChange={setSizeQty}
+          hint={
+            initial
+              ? 'Optional — adds pieces to warehouse stock for this design (both sizes).'
+              : 'Opening stock for this design. Leave blank for 0.'
+          }
+        />
         {!initial ? (
           <div className="field col-span-2">
             <label htmlFor="date_added">Date added</label>
