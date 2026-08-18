@@ -44,6 +44,14 @@ Migrations & functions:
 | Home | Brand hub, low-stock alerts, shortcuts (Owner) |
 | DNO | Master list, photo upload, detail view, add/edit (Owner) |
 | Stock | Add stock by DNO+size; In/Out/Balance report |
-| Orders | Create order (deducts that DNO+size in one RPC) |
+| Orders | Create order (deducts stock), WhatsApp pack with photo link, gate pass + scan |
 | Bill | GST tax invoice (Owner) |
-| Settings | Change role PINs (Owner) |
+| Settings | Warehouse WhatsApp number + role PINs (Owner) |
+
+## Env
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+| `VITE_STAFF_SUPPORT_WHATSAPP` | Support/packing WhatsApp digits with country code (default `919825063208`) |
