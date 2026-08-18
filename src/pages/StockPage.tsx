@@ -317,6 +317,9 @@ export function StockPage() {
                   <p className="truncate text-xs text-ink">
                     {dnos.find((d) => d.id === m.dno_id)?.category || '—'}
                   </p>
+                  <p className="truncate text-xs text-ink">
+                    {dnos.find((d) => d.id === m.dno_id)?.category || '—'}
+                  </p>
                   <p className="text-xs text-muted">
                     {m.size} · {m.date}
                     {m.note ? ` · ${m.note}` : ''}

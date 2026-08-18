@@ -232,8 +232,36 @@
 
   .page {
     flex: 1;
-    padding: 1rem 1rem 5.5rem;
+    padding: 1rem 1rem 1.25rem;
     animation: rise-in 320ms ease-out both;
+  }
+
+  .app-footer {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(31, 59, 87, 0.08);
+    background: transparent;
+  }
+
+  @media print {
+    .bottom-nav,
+    .app-header,
+    .side-nav,
+    .app-footer,
+    .btn,
+    .page-title,
+    .page-sub,
+    .stripe-bar {
+      display: none !important;
+    }
+
+    .page {
+      padding: 0 !important;
+    }
+
+    .gate-pass-slip {
+      border: 1px solid #1f3b57 !important;
+      break-inside: avoid;
+    }
   }
 
   .page-title {

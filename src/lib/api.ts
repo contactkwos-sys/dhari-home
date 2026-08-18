@@ -479,6 +479,63 @@ export async function createOrder(input: {
   return data as Order
 }
 
+export async function fetchOrderById(id: string): Promise<Order | null> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return (data as Order | null) ?? null
+}
+
+/** Upload courier signature PNG and mark gate pass as issued. */
+export async function issueGatePass(
+  orderId: string,
+  signatureBlob: Blob,
+): Promise<Order> {
+  const path = `${orderId}/${Date.now()}.png`
+  const { error: uploadError } = await supabase.storage
+    .from('gate-pass-signatures')
+    .upload(path, signatureBlob, {
+      upsert: true,
+      contentType: 'image/png',
+    })
+  if (uploadError) throw uploadError
+
+  const { data: urlData } = supabase.storage
+    .from('gate-pass-signatures')
+    .getPublicUrl(path)
+
+  const issuedAt = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('orders')
+    .update({
+      gate_pass_signature_url: urlData.publicUrl,
+      gate_pass_issued_at: issuedAt,
+    })
+    .eq('id', orderId)
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
+    .single()
+  if (error) throw error
+  if (!data) throw new Error('Gate pass update returned no row')
+  return data as Order
+}
+
+/** Mark a returned gate-pass slip as received (scan confirmation). */
+export async function markGatePassReceived(orderId: string): Promise<Order> {
+  const receivedAt = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ gate_pass_received_at: receivedAt })
+    .eq('id', orderId)
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
+    .single()
+  if (error) throw error
+  if (!data) throw new Error('Gate pass receive update returned no row')
+  return data as Order
+}
+
 export async function loginWithPin(
   role: AppRole,
   pin: string,
