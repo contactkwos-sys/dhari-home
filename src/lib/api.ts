@@ -141,6 +141,72 @@ export async function uploadDnoPhoto(
   return photo_url
 }
 
+export async function clearDnoPhoto(dnoId: string): Promise<DnoMaster> {
+  return updateDno(dnoId, { photo_url: null })
+}
+
+export async function deleteDno(id: string): Promise<void> {
+  const { count: orderCount, error: orderErr } = await supabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('dno_id', id)
+  if (orderErr) throw orderErr
+  if ((orderCount ?? 0) > 0) {
+    throw new Error(
+      'Cannot delete this DNO — it has orders. Remove related orders first.',
+    )
+  }
+
+  const { error: moveErr } = await supabase
+    .from('stock_movements')
+    .delete()
+    .eq('dno_id', id)
+  if (moveErr) throw moveErr
+
+  const { error } = await supabase.from('dno_master').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function updateStockMovement(
+  id: string,
+  patch: {
+    dno_id?: string
+    size?: DnoSize
+    type?: 'IN' | 'OUT'
+    qty?: number
+    date?: string
+    note?: string | null
+  },
+): Promise<StockMovement> {
+  const payload: Record<string, unknown> = { ...patch }
+  if (payload.qty != null) {
+    const qty = Math.floor(Number(payload.qty))
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new Error('Quantity must be a positive whole number')
+    }
+    payload.qty = qty
+  }
+  if (payload.note !== undefined) {
+    payload.note =
+      typeof payload.note === 'string' ? payload.note.trim() || null : null
+  }
+
+  const { data, error } = await supabase
+    .from('stock_movements')
+    .update(payload)
+    .eq('id', id)
+    .select('*, dno_master(dno_number)')
+    .single()
+  if (error) throw error
+  if (!data) throw new Error('Update returned no row — check RLS on stock_movements')
+  return data as StockMovement
+}
+
+export async function deleteStockMovement(id: string): Promise<void> {
+  const { error } = await supabase.from('stock_movements').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function fetchStockMovements(): Promise<StockMovement[]> {
   const { data, error } = await supabase
     .from('stock_movements')
