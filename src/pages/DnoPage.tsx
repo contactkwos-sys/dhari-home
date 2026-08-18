@@ -256,8 +256,11 @@ export function DnoPage() {
             <button
               type="button"
               className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark"
-              onClick={() => fileRefs.current[dno.id]?.click()}
-              aria-label={`Change photo for ${dno.dno_number}`}
+              onClick={() => {
+                setDetail(dno)
+                setSearch({ id: dno.id }, { replace: true })
+              }}
+              aria-label={`Open design ${dno.dno_number}`}
             >
               {dno.photo_url ? (
                 <img
@@ -336,6 +339,13 @@ export function DnoPage() {
                   }}
                 >
                   Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost !px-2.5 !py-1 text-xs"
+                  onClick={() => fileRefs.current[dno.id]?.click()}
+                >
+                  {dno.photo_url ? 'Change photo' : 'Add photo'}
                 </button>
                 <button
                   type="button"

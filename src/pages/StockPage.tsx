@@ -235,7 +235,11 @@ export function StockPage() {
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ivory-dark">
+                          <Link
+                            to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
+                            className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ivory-dark"
+                            aria-label={`Open design ${r.dno.dno_number}`}
+                          >
                             {r.dno.photo_url ? (
                               <img
                                 src={r.dno.photo_url}
@@ -247,7 +251,7 @@ export function StockPage() {
                                 —
                               </span>
                             )}
-                          </div>
+                          </Link>
                           <div className="min-w-0">
                             <Link
                               to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
@@ -304,8 +308,14 @@ export function StockPage() {
                 className="flex items-center justify-between gap-2 rounded-lg border border-[rgba(31,59,87,0.08)] bg-white/50 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="num text-sm font-medium text-indigo">
+                  <Link
+                    to={`/dno?id=${encodeURIComponent(m.dno_id)}`}
+                    className="num text-sm font-medium text-indigo hover:underline"
+                  >
                     {m.dno_master?.dno_number ?? m.dno_id.slice(0, 8)}
+                  </Link>
+                  <p className="truncate text-xs text-ink">
+                    {dnos.find((d) => d.id === m.dno_id)?.category || '—'}
                   </p>
                   <p className="truncate text-xs text-ink">
                     {dnos.find((d) => d.id === m.dno_id)?.category || '—'}

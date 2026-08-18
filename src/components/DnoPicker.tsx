@@ -63,7 +63,11 @@ export function DnoPicker({
 
       {selected ? (
         <div className="mt-2 flex gap-3 rounded-lg border border-[rgba(31,59,87,0.1)] bg-ivory-dark/40 p-2">
-          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-ivory-dark">
+          <Link
+            to={`/dno?id=${encodeURIComponent(selected.id)}`}
+            className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-ivory-dark"
+            aria-label={`Open design ${selected.dno_number}`}
+          >
             {selected.photo_url ? (
               <img
                 src={selected.photo_url}
@@ -75,7 +79,7 @@ export function DnoPicker({
                 No photo
               </span>
             )}
-          </div>
+          </Link>
           <div className="min-w-0 flex-1">
             <p className="num text-sm font-semibold text-indigo">
               {selected.dno_number}
@@ -96,14 +100,22 @@ export function DnoPicker({
                 </li>
               ))}
             </ul>
-            {viewTo ? (
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
               <Link
-                to={viewTo}
-                className="mt-1 inline-block text-xs font-medium text-turmeric"
+                to={`/dno?id=${encodeURIComponent(selected.id)}`}
+                className="text-xs font-medium text-turmeric"
               >
-                View in warehouse →
+                View design →
               </Link>
-            ) : null}
+              {viewTo ? (
+                <Link
+                  to={viewTo}
+                  className="text-xs font-medium text-turmeric"
+                >
+                  View in warehouse →
+                </Link>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

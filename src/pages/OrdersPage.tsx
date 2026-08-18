@@ -183,7 +183,11 @@ export function OrdersPage() {
           orders.map((o) => (
             <li key={o.id} className="panel panel-accent">
               <div className="flex items-start gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">
+                <Link
+                  to={`/dno?id=${encodeURIComponent(o.dno_id)}`}
+                  className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ivory-dark"
+                  aria-label={`Open design ${o.dno_master?.dno_number ?? ''}`}
+                >
                   {o.dno_master?.photo_url ? (
                     <img
                       src={o.dno_master.photo_url}
@@ -195,7 +199,7 @@ export function OrdersPage() {
                       No photo
                     </span>
                   )}
-                </div>
+                </Link>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -214,7 +218,7 @@ export function OrdersPage() {
                     <span>
                       DN{' '}
                       <Link
-                        to="/stock"
+                        to={`/dno?id=${encodeURIComponent(o.dno_id)}`}
                         className="num font-medium text-indigo hover:underline"
                       >
                         {o.dno_master?.dno_number ?? '—'}
@@ -252,6 +256,12 @@ export function OrdersPage() {
                     </p>
                   ) : null}
                   <div className="mt-2 flex flex-wrap gap-2">
+                    <Link
+                      to="/stock"
+                      className="btn btn-ghost !px-2.5 !py-1 text-xs"
+                    >
+                      Warehouse stock
+                    </Link>
                     <button
                       type="button"
                       className="btn btn-accent !px-2.5 !py-1 text-xs"
