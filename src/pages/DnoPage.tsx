@@ -169,7 +169,7 @@ export function DnoPage() {
     <div className="page">
       <PageHeader
         title="DN Master"
-        subtitle="Short DNs — Drop-up, Drop-down, DH"
+        subtitle="Short DNs — 5 foot, 7 foot, All over, quality"
         action={
           <button
             type="button"
@@ -489,7 +489,7 @@ function DnoDetail({
           <StripeBar />
 
           <dl className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
-            <DetailField label="Category" value={dno.category || '—'} />
+            <DetailField label="System / quality" value={dno.category || '—'} />
             <DetailField label="HSN" value={dno.hsn_code || '—'} />
             <DetailField label="GST" value={`${dno.gst_rate}%`} />
             <DetailField

@@ -38,7 +38,7 @@ function normalizeDno(row: DnoMaster): DnoMaster {
 
 export async function updateDno(
   id: string,
-  patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
+  patch: Partial<Omit<DnoMaster, 'id'>>,
 ): Promise<DnoMaster> {
   const payload = sanitizeDnoPatch(patch)
   const { data, error } = await supabase
@@ -47,7 +47,12 @@ export async function updateDno(
     .eq('id', id)
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('This DN number is already used by another design.')
+    }
+    throw error
+  }
   if (!data) throw new Error('Update returned no row — check RLS UPDATE/SELECT on dno_master')
   return normalizeDno(data)
 }
@@ -111,9 +116,14 @@ export async function createDno(input: {
 }
 
 function sanitizeDnoPatch(
-  patch: Partial<Omit<DnoMaster, 'id' | 'dno_number'>>,
-): Partial<Omit<DnoMaster, 'id' | 'dno_number'>> {
-  const out: Partial<Omit<DnoMaster, 'id' | 'dno_number'>> = { ...patch }
+  patch: Partial<Omit<DnoMaster, 'id'>>,
+): Partial<Omit<DnoMaster, 'id'>> {
+  const out: Partial<Omit<DnoMaster, 'id'>> = { ...patch }
+  if ('dno_number' in out) {
+    const n = normalizeDnoNumber(out.dno_number ?? '')
+    if (!n) throw new Error('DN number is required')
+    out.dno_number = n
+  }
   if ('category' in out) out.category = out.category?.trim() || null
   if ('hsn_code' in out) out.hsn_code = out.hsn_code?.trim() || null
   if ('other_manufacturer_name' in out) {

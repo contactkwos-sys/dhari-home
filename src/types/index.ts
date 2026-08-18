@@ -1,7 +1,18 @@
 export type Manufacturer = 'Jaisal Fashion Weave' | 'Other'
 
-/** Product lines: drop-up, drop-down, and DH (short numbers). */
-export type DesignSystem = 'Drop-up' | 'Drop-down' | 'DH'
+/** Pattern / drop systems shown in DN Master. */
+export const DESIGN_SYSTEM_OPTIONS = ['5 foot', '7 foot', 'All over'] as const
+export type DesignSystem = (typeof DESIGN_SYSTEM_OPTIONS)[number]
+
+/** Built-in quality names. Extra names typed under Others are collected from saved DNs. */
+export const DESIGN_QUALITY_PRESETS = ['Bright jacquard'] as const
+export type DesignQuality = (typeof DESIGN_QUALITY_PRESETS)[number]
+
+/** All built-in System / quality dropdown values (excludes Others). */
+export const DESIGN_SYSTEMS: readonly string[] = [
+  ...DESIGN_SYSTEM_OPTIONS,
+  ...DESIGN_QUALITY_PRESETS,
+]
 
 export type Platform =
   | 'Flipkart'
@@ -96,7 +107,34 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 
 export const SIZES: DnoSize[] = ['5ft x 4ft', '7ft x 4ft']
 
-export const DESIGN_SYSTEMS: DesignSystem[] = ['Drop-up', 'Drop-down', 'DH']
+/** Custom System / quality names already used on other DNs, for the dropdown. */
+export function extraDesignSystems(
+  dnos: Pick<DnoMaster, 'category'>[],
+): string[] {
+  const seen = new Set(DESIGN_SYSTEMS.map((s) => s.toLowerCase()))
+  const extras: string[] = []
+  for (const d of dnos) {
+    const c = d.category?.trim()
+    if (!c) continue
+    const key = c.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    extras.push(c)
+  }
+  extras.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+  return extras
+}
+
+/** Match a saved category to a built-in or extra dropdown value (case-insensitive). */
+export function matchDesignSystem(
+  category: string | null | undefined,
+  extras: readonly string[] = [],
+): string | null {
+  const raw = category?.trim()
+  if (!raw) return null
+  const all = [...DESIGN_SYSTEMS, ...extras]
+  return all.find((s) => s.toLowerCase() === raw.toLowerCase()) ?? null
+}
 
 export type SizeQtyMap = Record<DnoSize, string>
 
