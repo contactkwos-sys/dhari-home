@@ -244,38 +244,16 @@ export function DnoPage() {
             />
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <button
-                  type="button"
-                  className="num font-medium text-indigo hover:underline"
-                  onClick={() => {
-                    setDetail(dno)
-                    setSearch({ id: dno.id }, { replace: true })
-                  }}
-                >
-                  {dno.dno_number}
-                </button>
-                <div className="flex shrink-0 gap-3">
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-turmeric"
-                    onClick={() => {
-                      setEditing(dno)
-                      setShowAdd(false)
-                      setDetail(null)
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-[#9b2c2c]"
-                    onClick={() => void onDeleteDno(dno)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                className="num font-medium text-indigo hover:underline"
+                onClick={() => {
+                  setDetail(dno)
+                  setSearch({ id: dno.id }, { replace: true })
+                }}
+              >
+                {dno.dno_number}
+              </button>
               <p className="mt-0.5 truncate text-sm text-muted">
                 {dno.manufacturer === 'Other'
                   ? dno.other_manufacturer_name || 'Other'
@@ -292,15 +270,43 @@ export function DnoPage() {
                   </span>
                 </span>
                 <span>
-                  Alert{' '}
-                  <span className="num text-ink">
-                    ≤{dno.low_stock_threshold ?? 10}
-                  </span>
+                  GST{' '}
+                  <span className="num text-ink">{dno.gst_rate}%</span>
                 </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-ghost !px-2.5 !py-1 text-xs"
+                  onClick={() => {
+                    setDetail(dno)
+                    setSearch({ id: dno.id }, { replace: true })
+                  }}
+                >
+                  View
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary !px-2.5 !py-1 text-xs"
+                  onClick={() => {
+                    setEditing(dno)
+                    setShowAdd(false)
+                    setDetail(null)
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost !px-2.5 !py-1 text-xs text-[#9b2c2c]"
+                  onClick={() => void onDeleteDno(dno)}
+                >
+                  Delete
+                </button>
                 {dno.photo_url ? (
                   <button
                     type="button"
-                    className="font-medium text-[#9b2c2c]"
+                    className="btn btn-ghost !px-2.5 !py-1 text-xs text-[#9b2c2c]"
                     onClick={() => void onClearPhoto(dno)}
                   >
                     Remove photo
@@ -666,7 +672,7 @@ function DnoForm({
   const [hsn_code, setHsn] = useState(initial?.hsn_code ?? '6304')
   const [gst_rate, setGst] = useState(initial?.gst_rate?.toString() ?? '12')
   const [low_stock_threshold, setThreshold] = useState(
-    (initial?.low_stock_threshold ?? 10).toString(),
+    initial ? String(initial.low_stock_threshold ?? '') : '',
   )
   const [date_added, setDate] = useState(initial?.date_added ?? todayISO())
   const [busy, setBusy] = useState(false)
@@ -677,6 +683,12 @@ function DnoForm({
     setBusy(true)
     setErr(null)
     try {
+      const thresholdRaw = low_stock_threshold.trim()
+      const thresholdNum =
+        thresholdRaw === '' ? 10 : Math.max(0, Math.floor(Number(thresholdRaw)))
+      if (thresholdRaw !== '' && !Number.isFinite(thresholdNum)) {
+        throw new Error('Low stock threshold must be a number')
+      }
       const fields = {
         manufacturer,
         other_manufacturer_name:
@@ -685,7 +697,7 @@ function DnoForm({
         category: category.trim() || null,
         hsn_code: hsn_code.trim() || null,
         gst_rate: Number(gst_rate),
-        low_stock_threshold: Number(low_stock_threshold) || 10,
+        low_stock_threshold: thresholdNum,
         date_added,
       }
       if (initial) {
@@ -792,8 +804,8 @@ function DnoForm({
             type="number"
             min="0"
             step="1"
-            required
             value={low_stock_threshold}
+            placeholder="Leave blank if not needed"
             onChange={(e) => setThreshold(e.target.value)}
             className="num"
           />

@@ -230,10 +230,10 @@ export function StockPage() {
                     {m.size} · {m.date}
                     {m.note ? ` · ${m.note}` : ''}
                   </p>
-                  <div className="mt-1 flex gap-3">
+                  <div className="mt-1.5 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="text-xs font-medium text-turmeric"
+                      className="btn btn-primary !px-2.5 !py-1 text-xs"
                       onClick={() => {
                         setShowForm(false)
                         setEditing(m)
@@ -243,7 +243,7 @@ export function StockPage() {
                     </button>
                     <button
                       type="button"
-                      className="text-xs font-medium text-[#9b2c2c]"
+                      className="btn btn-ghost !px-2.5 !py-1 text-xs text-[#9b2c2c]"
                       onClick={() => void onDeleteMovement(m)}
                     >
                       Delete
