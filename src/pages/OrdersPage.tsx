@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { GatePassPanel } from '../components/GatePassPanel'
-import { GatePassScanner } from '../components/GatePassScanner'
 import { PageHeader } from '../components/PageHeader'
 import { DnoPicker } from '../components/DnoPicker'
 import {
@@ -22,6 +20,15 @@ import {
   SIZES,
   errorMessage,
 } from '../types'
+
+const GatePassPanel = lazy(() =>
+  import('../components/GatePassPanel').then((m) => ({ default: m.GatePassPanel })),
+)
+const GatePassScanner = lazy(() =>
+  import('../components/GatePassScanner').then((m) => ({
+    default: m.GatePassScanner,
+  })),
+)
 
 export function OrdersPage() {
   const [search, setSearch] = useSearchParams()
@@ -124,22 +131,26 @@ export function OrdersPage() {
       {loading ? <p className="text-muted text-sm">Loading…</p> : null}
 
       {showScanner ? (
-        <GatePassScanner
-          onClose={() => setShowScanner(false)}
-          onReceived={(updated) => {
-            upsertOrder(updated)
-          }}
-        />
+        <Suspense fallback={<p className="text-sm text-muted mb-4">Loading scanner…</p>}>
+          <GatePassScanner
+            onClose={() => setShowScanner(false)}
+            onReceived={(updated) => {
+              upsertOrder(updated)
+            }}
+          />
+        </Suspense>
       ) : null}
 
       {gatePassOrder ? (
-        <GatePassPanel
-          order={gatePassOrder}
-          onClose={() => setGatePassOrderId(null)}
-          onIssued={(updated) => {
-            upsertOrder(updated)
-          }}
-        />
+        <Suspense fallback={<p className="text-sm text-muted mb-4">Loading gate pass…</p>}>
+          <GatePassPanel
+            order={gatePassOrder}
+            onClose={() => setGatePassOrderId(null)}
+            onIssued={(updated) => {
+              upsertOrder(updated)
+            }}
+          />
+        </Suspense>
       ) : null}
 
       {packPrompt ? (
