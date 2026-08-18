@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AddDesignForm } from '../components/AddDesignForm'
+import { DnoPicker } from '../components/DnoPicker'
 import { PageHeader } from '../components/PageHeader'
 import { SizePiecesFields } from '../components/SizePiecesFields'
 import {
@@ -96,7 +97,7 @@ export function StockPage() {
     <div className="page">
       <PageHeader
         title="Warehouse"
-        subtitle="Balances per DNO + size"
+        subtitle="Add more pieces to the same DN"
         action={
           <div className="flex flex-wrap justify-end gap-2">
             <button
@@ -141,11 +142,16 @@ export function StockPage() {
 
       {showDesign ? (
         <AddDesignForm
+          existingDnos={dnos}
           onCancel={() => {
             setShowDesign(false)
             clearQuery()
           }}
-          onSaved={async () => {
+          onSaved={async (_dno, opts) => {
+            if (opts?.addNext) {
+              await load()
+              return
+            }
             setShowDesign(false)
             clearQuery()
             await load()
@@ -357,8 +363,6 @@ function AddStockForm({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const selected = dnos.find((d) => d.id === dno_id)
-
   function setSizeQty(size: DnoSize, value: string) {
     setQtyBySize((prev) => ({ ...prev, [size]: value }))
   }
@@ -394,8 +398,7 @@ function AddStockForm({
     <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">Add stock</h2>
       <p className="text-xs text-muted">
-        Adds IN movements for this design — enter pieces for 5ft x 4ft and/or
-        7ft x 4ft. Balances show the same split on the stock report.
+        Pick an existing DN and add more pieces. Balances update In / Out / Bal.
       </p>
       {dnos.length === 0 ? (
         <div className="rounded-lg bg-indigo/5 px-3 py-3 text-sm">
@@ -410,42 +413,13 @@ function AddStockForm({
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          <div className="field col-span-2">
-            <label htmlFor="mv_dno">Design (DNO)</label>
-            <select
-              id="mv_dno"
-              required
-              value={dno_id}
-              onChange={(e) => setDnoId(e.target.value)}
-            >
-              {dnos.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.dno_number}
-                  {d.category ? ` · ${d.category}` : ''}
-                </option>
-              ))}
-            </select>
-            {selected ? (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="h-12 w-12 overflow-hidden rounded-md bg-ivory-dark">
-                  {selected.photo_url ? (
-                    <img
-                      src={selected.photo_url}
-                      alt={selected.dno_number}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-[0.55rem] text-muted">
-                      No photo
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted">
-                  {selected.category || 'Uncategorized'}
-                </p>
-              </div>
-            ) : null}
-          </div>
+          <DnoPicker
+            id="mv_dno"
+            label="DN number"
+            dnos={dnos}
+            value={dno_id}
+            onChange={setDnoId}
+          />
           <SizePiecesFields
             idPrefix="add_stock_qty"
             values={qtyBySize}

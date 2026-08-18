@@ -17,6 +17,7 @@ import type {
   StockRow,
 } from '../types'
 import { SIZES, errorMessage } from '../types'
+import { compareDnoNumbers, normalizeDnoNumber, sortDnos } from './dnoNumber'
 
 export async function fetchDnos(): Promise<DnoMaster[]> {
   const { data, error } = await supabase
@@ -24,7 +25,7 @@ export async function fetchDnos(): Promise<DnoMaster[]> {
     .select('*')
     .order('dno_number')
   if (error) throw error
-  return (data ?? []).map(normalizeDno)
+  return sortDnos((data ?? []).map(normalizeDno))
 }
 
 function normalizeDno(row: DnoMaster): DnoMaster {
@@ -63,8 +64,8 @@ export async function createDno(input: {
   photo_url?: string | null
   low_stock_threshold?: number
 }): Promise<DnoMaster> {
-  const dno_number = input.dno_number.trim()
-  if (!dno_number) throw new Error('DNO number is required')
+  const dno_number = normalizeDnoNumber(input.dno_number)
+  if (!dno_number) throw new Error('DN number is required')
 
   const row = {
     dno_number,
@@ -97,7 +98,14 @@ export async function createDno(input: {
     .insert(row)
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error(
+        'This DN already exists. Open Warehouse → Add stock to add more pieces to the same DN.',
+      )
+    }
+    throw error
+  }
   if (!data) throw new Error('Insert returned no row — check RLS INSERT/SELECT on dno_master')
   return normalizeDno(data)
 }
@@ -360,6 +368,15 @@ export async function getStockBalance(
   return Number(data ?? 0)
 }
 
+export async function getStockBalancesBySize(
+  dnoId: string,
+): Promise<Record<DnoSize, number>> {
+  const pairs = await Promise.all(
+    SIZES.map(async (size) => [size, await getStockBalance(dnoId, size)] as const),
+  )
+  return Object.fromEntries(pairs) as Record<DnoSize, number>
+}
+
 export async function fetchStockRows(): Promise<StockRow[]> {
   const [dnos, movements] = await Promise.all([
     fetchDnos(),
@@ -388,7 +405,7 @@ export async function fetchStockRows(): Promise<StockRow[]> {
   }
 
   rows.sort((a, b) => {
-    const byDno = a.dno.dno_number.localeCompare(b.dno.dno_number)
+    const byDno = compareDnoNumbers(a.dno.dno_number, b.dno.dno_number)
     if (byDno !== 0) return byDno
     return a.size.localeCompare(b.size)
   })
@@ -405,7 +422,7 @@ export async function fetchLowStockItems(): Promise<LowStockItem[]> {
       balance: r.balance,
       threshold: r.dno.low_stock_threshold ?? 10,
     }))
-    .sort((a, b) => a.balance - b.balance || a.dno.dno_number.localeCompare(b.dno.dno_number))
+    .sort((a, b) => a.balance - b.balance || compareDnoNumbers(a.dno.dno_number, b.dno.dno_number))
 }
 
 export async function fetchOrders(): Promise<Order[]> {

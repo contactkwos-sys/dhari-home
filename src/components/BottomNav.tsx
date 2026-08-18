@@ -6,7 +6,7 @@ import { tabsForRole } from '../lib/nav'
 
 const shortLabel: Record<string, string> = {
   '/': 'Home',
-  '/dno': 'DNO',
+  '/dno': 'DN',
   '/stock': 'Stock',
   '/orders': 'Orders',
   '/bill': 'Bill',

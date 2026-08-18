@@ -9,7 +9,7 @@ export type AppTab = {
 
 export const APP_TABS: readonly AppTab[] = [
   { to: '/', label: 'Dashboard', end: true, roles: ['Owner'] },
-  { to: '/dno', label: 'DNO Master', end: false, roles: ['Owner'] },
+  { to: '/dno', label: 'DN Master', end: false, roles: ['Owner'] },
   { to: '/stock', label: 'Warehouse', end: false, roles: ['Owner', 'Warehouse'] },
   { to: '/orders', label: 'Orders', end: false, roles: ['Owner', 'Warehouse'] },
   { to: '/bill', label: 'Bill', end: false, roles: ['Owner'] },

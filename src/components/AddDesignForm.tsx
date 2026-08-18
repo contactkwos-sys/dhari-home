@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState } from 'react'
 import {
   addStockInForSizes,
   createDno,
@@ -8,21 +8,47 @@ import {
   uploadDnoPhoto,
 } from '../lib/api'
 import { photoUploadErrorMessage } from '../lib/compressImage'
-import type { DnoMaster, DnoSize, Manufacturer } from '../types'
-import { SIZES, emptySizeQtyMap, errorMessage, type SizeQtyMap } from '../types'
+import { nextAfterDnoNumber, normalizeDnoNumber, suggestNextDnoNumber } from '../lib/dnoNumber'
+import type { DesignSystem, DnoMaster, DnoSize, Manufacturer } from '../types'
+import {
+  DESIGN_SYSTEMS,
+  SIZES,
+  emptySizeQtyMap,
+  errorMessage,
+  type SizeQtyMap,
+} from '../types'
 import { SizePiecesFields } from './SizePiecesFields'
+
+function systemFromCategory(
+  category: string | null | undefined,
+  isNew: boolean,
+): {
+  system: DesignSystem | 'Other' | ''
+  other: string
+} {
+  if (category && (DESIGN_SYSTEMS as string[]).includes(category)) {
+    return { system: category as DesignSystem, other: '' }
+  }
+  if (category?.trim()) return { system: 'Other', other: category }
+  return { system: isNew ? 'Drop-up' : '', other: '' }
+}
 
 export function AddDesignForm({
   initial = null,
+  existingDnos = [],
   onCancel,
   onSaved,
 }: {
   initial?: DnoMaster | null
+  existingDnos?: DnoMaster[]
   onCancel: () => void
-  onSaved: (dno: DnoMaster) => Promise<void> | void
+  onSaved: (dno: DnoMaster, opts?: { addNext: boolean }) => Promise<void> | void
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
-  const [dno_number, setDnoNumber] = useState(initial?.dno_number ?? '')
+  const initialSystem = systemFromCategory(initial?.category, !initial)
+  const [dno_number, setDnoNumber] = useState(
+    initial?.dno_number ?? suggestNextDnoNumber(existingDnos),
+  )
   const [manufacturer, setManufacturer] = useState<Manufacturer>(
     initial?.manufacturer ?? 'Jaisal Fashion Weave',
   )
@@ -32,7 +58,10 @@ export function AddDesignForm({
   const [purchase_rate, setPurchaseRate] = useState(
     initial?.purchase_rate?.toString() ?? '',
   )
-  const [category, setCategory] = useState(initial?.category ?? '')
+  const [system, setSystem] = useState<DesignSystem | 'Other' | ''>(
+    initialSystem.system,
+  )
+  const [other_system, setOtherSystem] = useState(initialSystem.other)
   const [hsn_code, setHsn] = useState(initial?.hsn_code ?? '6304')
   const [gst_rate, setGst] = useState(initial?.gst_rate?.toString() ?? '12')
   const [low_stock_threshold, setThreshold] = useState(
@@ -46,6 +75,12 @@ export function AddDesignForm({
   const [qtyBySize, setQtyBySize] = useState<SizeQtyMap>(emptySizeQtyMap())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
+
+  function categoryValue(): string | null {
+    if (system === 'Other' || system === '') return other_system.trim() || null
+    return system
+  }
 
   function setSizeQty(size: DnoSize, value: string) {
     setQtyBySize((prev) => ({ ...prev, [size]: value }))
@@ -65,10 +100,22 @@ export function AddDesignForm({
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  async function submit(e: FormEvent) {
+  function resetForNext(saved: DnoMaster) {
+    if (photoPreview?.startsWith('blob:')) URL.revokeObjectURL(photoPreview)
+    setDnoNumber(nextAfterDnoNumber(saved.dno_number))
+    setPhotoFile(null)
+    setPhotoPreview(null)
+    setQtyBySize(emptySizeQtyMap())
+    setPurchaseRate('')
+    setDate(todayISO())
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  async function submit(e: { preventDefault: () => void }, addNext: boolean) {
     e.preventDefault()
     setBusy(true)
     setErr(null)
+    setOk(null)
     try {
       const thresholdRaw = low_stock_threshold.trim()
       const thresholdNum =
@@ -85,7 +132,7 @@ export function AddDesignForm({
         other_manufacturer_name:
           manufacturer === 'Other' ? other_manufacturer_name.trim() || null : null,
         purchase_rate: purchase_rate === '' ? null : Number(purchase_rate),
-        category: category.trim() || null,
+        category: categoryValue(),
         hsn_code: hsn_code.trim() || null,
         gst_rate: Number(gst_rate),
         low_stock_threshold: thresholdNum,
@@ -97,7 +144,7 @@ export function AddDesignForm({
         saved = await updateDno(initial.id, fields)
       } else {
         saved = await createDno({
-          dno_number: dno_number.trim(),
+          dno_number: normalizeDnoNumber(dno_number),
           ...fields,
         })
       }
@@ -129,13 +176,18 @@ export function AddDesignForm({
         }
       }
 
-      await onSaved(saved)
       const warnings = [photoWarning, stockWarning].filter(Boolean)
+      await onSaved(saved, { addNext })
       if (warnings.length) {
         setErr(
-          `${warnings.join(' ')}. Design details were saved — retry photo or add stock if needed.`,
+          `${warnings.join(' ')}. Design saved — retry photo or add stock in Warehouse.`,
         )
+        if (addNext && !initial) resetForNext(saved)
         return
+      }
+      if (addNext && !initial) {
+        setOk(`Saved ${saved.dno_number}. Next DN ready.`)
+        resetForNext(saved)
       }
     } catch (error) {
       setErr(errorMessage(error, 'Save failed'))
@@ -145,14 +197,18 @@ export function AddDesignForm({
   }
 
   return (
-    <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
+    <form
+      onSubmit={(e) => void submit(e, false)}
+      className="panel panel-accent mb-4 space-y-3"
+    >
       <h2 className="font-display text-lg text-indigo">
         {initial ? `Edit ${initial.dno_number}` : 'Add design'}
       </h2>
       <p className="text-xs text-muted">
-        Design number (DNO), photo, rates, and pieces per size — same as the
-        warehouse stock report.
+        Short DN — DN-1 to DN-21, or DN 1001 for DH. Same DN again: Warehouse →
+        Add stock.
       </p>
+      {ok ? <p className="ok text-sm">{ok}</p> : null}
 
       <div className="field">
         <label htmlFor="design_photo">Design photo</label>
@@ -192,9 +248,6 @@ export function AddDesignForm({
                 Clear
               </button>
             ) : null}
-            <p className="text-[0.65rem] text-muted">
-              JPEG, PNG or WebP. Shown in Orders design view.
-            </p>
           </div>
         </div>
         <input
@@ -212,7 +265,7 @@ export function AddDesignForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="field col-span-2">
-          <label htmlFor="dno_number">DNO number</label>
+          <label htmlFor="dno_number">DN number</label>
           <input
             id="dno_number"
             required
@@ -220,9 +273,41 @@ export function AddDesignForm({
             onChange={(e) => setDnoNumber(e.target.value)}
             className="num"
             disabled={!!initial}
-            placeholder="e.g. DH-0022"
+            placeholder="DN-1 or DN 1001"
+            autoCapitalize="characters"
           />
         </div>
+        <div className="field col-span-2">
+          <label htmlFor="system">System</label>
+          <select
+            id="system"
+            value={system}
+            onChange={(e) =>
+              setSystem(e.target.value as DesignSystem | 'Other' | '')
+            }
+          >
+            {initial && !initial.category ? (
+              <option value="">—</option>
+            ) : null}
+            {DESIGN_SYSTEMS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        {system === 'Other' ? (
+          <div className="field col-span-2">
+            <label htmlFor="other_system">Other system</label>
+            <input
+              id="other_system"
+              value={other_system}
+              onChange={(e) => setOtherSystem(e.target.value)}
+              required
+            />
+          </div>
+        ) : null}
         <div className="field col-span-2">
           <label htmlFor="manufacturer">Manufacturer</label>
           <select
@@ -258,14 +343,6 @@ export function AddDesignForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="category">Category</label>
-          <input
-            id="category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          />
-        </div>
-        <div className="field">
           <label htmlFor="hsn">HSN code</label>
           <input
             id="hsn"
@@ -287,7 +364,7 @@ export function AddDesignForm({
             required
           />
         </div>
-        <div className="field col-span-2">
+        <div className="field">
           <label htmlFor="threshold">Low stock threshold</label>
           <input
             id="threshold"
@@ -306,8 +383,8 @@ export function AddDesignForm({
           onChange={setSizeQty}
           hint={
             initial
-              ? 'Optional — adds pieces to warehouse stock for this design (both sizes).'
-              : 'Opening stock for this design. Leave blank for 0.'
+              ? 'Optional — adds pieces to this DN in warehouse.'
+              : 'Opening stock. Leave blank for 0. Add more later in Warehouse.'
           }
         />
         {!initial ? (
@@ -323,10 +400,20 @@ export function AddDesignForm({
         ) : null}
       </div>
       {err ? <p className="err whitespace-pre-wrap">{err}</p> : null}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? 'Saving…' : 'Save design'}
+          {busy ? 'Saving…' : 'Save'}
         </button>
+        {!initial ? (
+          <button
+            type="button"
+            className="btn btn-accent"
+            disabled={busy}
+            onClick={(e) => void submit(e, true)}
+          >
+            {busy ? 'Saving…' : 'Save & next'}
+          </button>
+        ) : null}
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel
         </button>

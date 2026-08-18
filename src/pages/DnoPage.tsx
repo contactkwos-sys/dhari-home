@@ -168,8 +168,8 @@ export function DnoPage() {
   return (
     <div className="page">
       <PageHeader
-        title="DNO Master"
-        subtitle="Design numbers, photos & rates"
+        title="DN Master"
+        subtitle="Short DNs — Drop-up, Drop-down, DH"
         action={
           <button
             type="button"
@@ -192,12 +192,17 @@ export function DnoPage() {
       {(showAdd || editing) && (
         <AddDesignForm
           initial={editing}
+          existingDnos={rows}
           onCancel={() => {
             setShowAdd(false)
             setEditing(null)
             clearQuery()
           }}
-          onSaved={async () => {
+          onSaved={async (_dno, opts) => {
+            if (opts?.addNext) {
+              await load()
+              return
+            }
             setShowAdd(false)
             setEditing(null)
             clearQuery()
@@ -207,6 +212,11 @@ export function DnoPage() {
       )}
 
       <ul className="mt-2 space-y-3">
+        {rows.length === 0 && !loading ? (
+          <li className="text-sm text-muted">
+            No DNs yet. Add one, then Save & next for DN 2, DN 3, …
+          </li>
+        ) : null}
         {rows.map((dno) => (
           <li key={dno.id} className="panel panel-accent flex gap-3">
             <button
