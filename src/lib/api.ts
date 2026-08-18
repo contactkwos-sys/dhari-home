@@ -344,7 +344,7 @@ export async function fetchLowStockItems(): Promise<LowStockItem[]> {
 export async function fetchOrders(): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, dno_master(dno_number, hsn_code, gst_rate, category)')
+    .select('*, dno_master(dno_number, hsn_code, gst_rate, category, photo_url)')
     .order('order_date', { ascending: false })
     .order('id', { ascending: false })
   if (error) throw error

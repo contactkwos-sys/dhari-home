@@ -3,6 +3,7 @@ export type Manufacturer = 'Jaisal Fashion Weave' | 'Other'
 export type Platform =
   | 'Flipkart'
   | 'Amazon'
+  | 'IndiaMART'
   | 'Meesho'
   | 'Myntra'
   | 'Website'
@@ -55,7 +56,7 @@ export interface Order {
   size: DnoSize
   dno_master?: Pick<
     DnoMaster,
-    'dno_number' | 'hsn_code' | 'gst_rate' | 'category'
+    'dno_number' | 'hsn_code' | 'gst_rate' | 'category' | 'photo_url'
   > | null
 }
 
@@ -77,6 +78,7 @@ export interface LowStockItem {
 export const PLATFORMS: Platform[] = [
   'Flipkart',
   'Amazon',
+  'IndiaMART',
   'Meesho',
   'Myntra',
   'Website',
