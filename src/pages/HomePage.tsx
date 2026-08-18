@@ -127,7 +127,7 @@ export function HomePage() {
 
       <section className="mt-4 flex flex-wrap gap-2">
         <Link to="/dno?add=1" className="btn btn-primary text-sm">
-          Add DNO
+          Add design
         </Link>
         <Link to="/stock?add=1" className="btn btn-accent text-sm">
           Add Stock

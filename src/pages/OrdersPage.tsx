@@ -10,6 +10,7 @@ import {
   getStockBalance,
   todayISO,
 } from '../lib/api'
+import { openWhatsAppPack, type PackDispatchPayload } from '../lib/whatsapp'
 import type { DnoMaster, DnoSize, Order, PaymentStatus, Platform } from '../types'
 import {
   INDIAN_STATES,
@@ -27,6 +28,7 @@ export function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [packPrompt, setPackPrompt] = useState<PackDispatchPayload | null>(null)
 
   useEffect(() => {
     if (search.get('add') === '1') setShowForm(true)
@@ -50,6 +52,17 @@ export function OrdersPage() {
     void load()
   }, [])
 
+  function packPayloadFromOrder(o: Order): PackDispatchPayload {
+    return {
+      dnoNumber: o.dno_master?.dno_number ?? '—',
+      size: o.size,
+      pieces: o.pieces,
+      platform: o.platform,
+      platformOrderId: o.platform_order_id,
+      buyerName: o.buyer_name,
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -61,6 +74,7 @@ export function OrdersPage() {
             className="btn btn-primary text-sm"
             onClick={() => {
               setShowForm(true)
+              setPackPrompt(null)
               navigate('/orders?add=1')
             }}
           >
@@ -72,6 +86,13 @@ export function OrdersPage() {
       {error ? <p className="err mb-3 whitespace-pre-wrap">{error}</p> : null}
       {loading ? <p className="text-muted text-sm">Loading…</p> : null}
 
+      {packPrompt ? (
+        <PackDispatchBanner
+          payload={packPrompt}
+          onClose={() => setPackPrompt(null)}
+        />
+      ) : null}
+
       {showForm ? (
         <OrderForm
           dnos={dnos}
@@ -79,9 +100,10 @@ export function OrdersPage() {
             setShowForm(false)
             setSearch({}, { replace: true })
           }}
-          onSaved={async () => {
+          onSaved={async (payload) => {
             setShowForm(false)
             setSearch({}, { replace: true })
+            setPackPrompt(payload)
             await load()
           }}
         />
@@ -93,53 +115,113 @@ export function OrdersPage() {
         ) : (
           orders.map((o) => (
             <li key={o.id} className="panel panel-accent">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-display text-base text-indigo">
-                    {o.platform}
-                  </p>
-                  <p className="num text-xs text-muted">
-                    {o.platform_order_id || '—'} · {o.order_date}
-                  </p>
+              <div className="flex items-start gap-3">
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">
+                  {o.dno_master?.photo_url ? (
+                    <img
+                      src={o.dno_master.photo_url}
+                      alt={o.dno_master.dno_number}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-[0.55rem] text-muted">
+                      No photo
+                    </span>
+                  )}
                 </div>
-                <span className="rounded-md bg-ivory-dark px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-indigo">
-                  {o.payment_status}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-display text-base text-indigo">
+                        {o.platform}
+                      </p>
+                      <p className="num text-xs text-muted">
+                        {o.platform_order_id || '—'} · {o.order_date}
+                      </p>
+                    </div>
+                    <span className="rounded-md bg-ivory-dark px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-indigo">
+                      {o.payment_status}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                    <span>
+                      Design{' '}
+                      <span className="num font-medium">
+                        {o.dno_master?.dno_number ?? '—'}
+                      </span>
+                    </span>
+                    <span>
+                      Size <span className="font-medium">{o.size}</span>
+                    </span>
+                    <span>
+                      Pcs <span className="num font-medium">{o.pieces}</span>
+                    </span>
+                    <span>
+                      Rate{' '}
+                      <span className="num font-medium">
+                        {formatMoney(o.sale_rate)}
+                      </span>
+                    </span>
+                  </div>
+                  {(o.buyer_name || o.buyer_state) && (
+                    <p className="mt-1 text-xs text-muted">
+                      {[o.buyer_name, o.buyer_state].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                  {(o.courier || o.awb_number) && (
+                    <p className="mt-0.5 text-xs text-muted">
+                      {[o.courier, o.awb_number].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="btn btn-accent !px-2.5 !py-1 text-xs"
+                      onClick={() => openWhatsAppPack(packPayloadFromOrder(o))}
+                    >
+                      WhatsApp pack
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                <span>
-                  DNO{' '}
-                  <span className="num font-medium">
-                    {o.dno_master?.dno_number ?? '—'}
-                  </span>
-                </span>
-                <span>
-                  Size <span className="font-medium">{o.size}</span>
-                </span>
-                <span>
-                  Pcs <span className="num font-medium">{o.pieces}</span>
-                </span>
-                <span>
-                  Rate{' '}
-                  <span className="num font-medium">
-                    {formatMoney(o.sale_rate)}
-                  </span>
-                </span>
-              </div>
-              {(o.buyer_name || o.buyer_state) && (
-                <p className="mt-1 text-xs text-muted">
-                  {[o.buyer_name, o.buyer_state].filter(Boolean).join(' · ')}
-                </p>
-              )}
-              {(o.courier || o.awb_number) && (
-                <p className="mt-0.5 text-xs text-muted">
-                  {[o.courier, o.awb_number].filter(Boolean).join(' · ')}
-                </p>
-              )}
             </li>
           ))
         )}
       </ul>
+    </div>
+  )
+}
+
+function PackDispatchBanner({
+  payload,
+  onClose,
+}: {
+  payload: PackDispatchPayload
+  onClose: () => void
+}) {
+  return (
+    <div className="panel panel-accent mb-4 border border-turmeric/40 bg-[#c98a2c]/10">
+      <h2 className="font-display text-lg text-indigo">Issued to warehouse</h2>
+      <p className="mt-1 text-sm text-muted">
+        Stock deducted. Send packing details to the warehouse department on
+        WhatsApp / WhatsApp Business.
+      </p>
+      <p className="mt-2 num text-sm text-ink">
+        {payload.dnoNumber} · {payload.size} · {payload.pieces} pcs ·{' '}
+        {payload.platform}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn btn-primary text-sm"
+          onClick={() => openWhatsAppPack(payload)}
+        >
+          Send WhatsApp
+        </button>
+        <button type="button" className="btn btn-ghost text-sm" onClick={onClose}>
+          Dismiss
+        </button>
+      </div>
     </div>
   )
 }
@@ -151,7 +233,7 @@ function OrderForm({
 }: {
   dnos: DnoMaster[]
   onCancel: () => void
-  onSaved: () => Promise<void>
+  onSaved: (pack: PackDispatchPayload) => Promise<void>
 }) {
   const [order_date, setOrderDate] = useState(todayISO())
   const [dno_id, setDnoId] = useState(dnos[0]?.id ?? '')
@@ -170,6 +252,11 @@ function OrderForm({
   const [available, setAvailable] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  const selected = useMemo(
+    () => dnos.find((d) => d.id === dno_id) ?? null,
+    [dnos, dno_id],
+  )
 
   useEffect(() => {
     if (!dno_id || !size) {
@@ -203,6 +290,10 @@ function OrderForm({
       )
       return
     }
+    if (!selected) {
+      setErr('Select a design from the design view.')
+      return
+    }
     setBusy(true)
     setErr(null)
     try {
@@ -221,7 +312,14 @@ function OrderForm({
         payment_status,
         invoice_no: invoice_no.trim() || null,
       })
-      await onSaved()
+      await onSaved({
+        dnoNumber: selected.dno_number,
+        size,
+        pieces: piecesNum,
+        platform,
+        platformOrderId: platform_order_id.trim() || null,
+        buyerName: buyer_name.trim() || null,
+      })
     } catch (error) {
       setErr(errorMessage(error, 'Failed to create order'))
     } finally {
@@ -232,6 +330,10 @@ function OrderForm({
   return (
     <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">Add order</h2>
+      <p className="text-xs text-muted">
+        Select a design, issue stock, then notify warehouse on WhatsApp to pack
+        for Flipkart / Amazon / IndiaMART dispatch.
+      </p>
 
       <div className="rounded-lg bg-indigo/5 px-3 py-2 text-sm">
         Stock for {size}:{' '}
@@ -240,6 +342,64 @@ function OrderForm({
         </span>
         {blocked ? (
           <span className="err ml-2">Not enough stock</span>
+        ) : null}
+      </div>
+
+      <div className="field">
+        <label>Design view</label>
+        {dnos.length === 0 ? (
+          <p className="text-sm text-muted">
+            No designs yet — add one from DNO Master or Warehouse.
+          </p>
+        ) : (
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {dnos.map((d) => {
+              const active = d.id === dno_id
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setDnoId(d.id)}
+                  className={[
+                    'overflow-hidden rounded-lg border text-left transition',
+                    active
+                      ? 'border-indigo ring-2 ring-indigo/30'
+                      : 'border-[rgba(31,59,87,0.12)] hover:border-indigo/40',
+                  ].join(' ')}
+                  aria-pressed={active}
+                >
+                  <div className="aspect-square bg-ivory-dark">
+                    {d.photo_url ? (
+                      <img
+                        src={d.photo_url}
+                        alt={d.dno_number}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-[0.65rem] text-muted">
+                        No photo
+                      </span>
+                    )}
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <p className="num text-xs font-semibold text-indigo">
+                      {d.dno_number}
+                    </p>
+                    <p className="truncate text-[0.65rem] text-muted">
+                      {d.category || 'Uncategorized'}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {selected ? (
+          <p className="mt-2 text-xs text-muted">
+            Selected:{' '}
+            <span className="num font-medium text-ink">{selected.dno_number}</span>
+            {selected.category ? ` · ${selected.category}` : ''}
+          </p>
         ) : null}
       </div>
 
@@ -268,8 +428,8 @@ function OrderForm({
             ))}
           </select>
         </div>
-        <div className="field">
-          <label htmlFor="ord_dno">DNO</label>
+        <div className="field col-span-2">
+          <label htmlFor="ord_dno">Design (DNO)</label>
           <select
             id="ord_dno"
             required
@@ -279,6 +439,7 @@ function OrderForm({
             {dnos.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.dno_number}
+                {d.category ? ` · ${d.category}` : ''}
               </option>
             ))}
           </select>
@@ -298,15 +459,6 @@ function OrderForm({
             ))}
           </select>
         </div>
-        <div className="field col-span-2">
-          <label htmlFor="poid">Platform order ID</label>
-          <input
-            id="poid"
-            value={platform_order_id}
-            onChange={(e) => setPlatformOrderId(e.target.value)}
-            className="num"
-          />
-        </div>
         <div className="field">
           <label htmlFor="pcs">Pieces</label>
           <input
@@ -317,6 +469,15 @@ function OrderForm({
             required
             value={pieces}
             onChange={(e) => setPieces(e.target.value)}
+            className="num"
+          />
+        </div>
+        <div className="field col-span-2">
+          <label htmlFor="poid">Platform order ID</label>
+          <input
+            id="poid"
+            value={platform_order_id}
+            onChange={(e) => setPlatformOrderId(e.target.value)}
             className="num"
           />
         </div>
@@ -406,7 +567,7 @@ function OrderForm({
           className="btn btn-primary"
           disabled={busy || blocked || !dno_id}
         >
-          {busy ? 'Saving…' : 'Save order'}
+          {busy ? 'Issuing…' : 'Issue & save'}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel

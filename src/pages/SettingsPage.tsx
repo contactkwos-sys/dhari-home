@@ -2,6 +2,10 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { resetRolePin } from '../lib/api'
+import {
+  getWarehouseWhatsAppPhone,
+  setWarehouseWhatsAppPhone,
+} from '../lib/whatsapp'
 import type { AppRole } from '../types'
 import { APP_ROLES, errorMessage } from '../types'
 
@@ -12,6 +16,9 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
+  const [waPhone, setWaPhone] = useState(() => getWarehouseWhatsAppPhone())
+  const [waOk, setWaOk] = useState<string | null>(null)
+  const [waErr, setWaErr] = useState<string | null>(null)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -38,14 +45,60 @@ export function SettingsPage() {
     }
   }
 
+  function saveWhatsApp(e: FormEvent) {
+    e.preventDefault()
+    setWaOk(null)
+    setWaErr(null)
+    const digits = waPhone.replace(/\D/g, '')
+    if (digits && digits.length < 10) {
+      setWaErr('Include country code, e.g. 9198XXXXXXXX')
+      return
+    }
+    setWarehouseWhatsAppPhone(digits)
+    setWaPhone(digits)
+    setWaOk(
+      digits
+        ? 'Warehouse WhatsApp number saved on this device'
+        : 'WhatsApp number cleared — pack links will open chat picker',
+    )
+  }
+
   return (
     <div className="page">
       <PageHeader
         title="Settings"
-        subtitle="Owner-only PIN management"
+        subtitle="Owner-only PIN & dispatch"
       />
 
+      <form onSubmit={saveWhatsApp} className="panel panel-accent mb-4 space-y-3">
+        <h2 className="font-display text-lg text-indigo">
+          Warehouse WhatsApp
+        </h2>
+        <p className="text-sm text-muted">
+          Optional. After issuing an order, “Send WhatsApp” opens WhatsApp /
+          WhatsApp Business with design number, size (feet), pieces and
+          platform for packing. Leave blank to choose the chat each time.
+        </p>
+        <div className="field">
+          <label htmlFor="wa_phone">Phone (with country code)</label>
+          <input
+            id="wa_phone"
+            inputMode="tel"
+            value={waPhone}
+            onChange={(e) => setWaPhone(e.target.value.replace(/\D/g, ''))}
+            placeholder="9198XXXXXXXX"
+            className="num"
+          />
+        </div>
+        {waErr ? <p className="err">{waErr}</p> : null}
+        {waOk ? <p className="ok">{waOk}</p> : null}
+        <button type="submit" className="btn btn-primary">
+          Save WhatsApp number
+        </button>
+      </form>
+
       <form onSubmit={submit} className="panel panel-accent space-y-3">
+        <h2 className="font-display text-lg text-indigo">Role PINs</h2>
         <p className="text-sm text-muted">
           Change the 4-digit PIN for Owner or Warehouse. PINs are verified
           server-side and never stored in the app.
