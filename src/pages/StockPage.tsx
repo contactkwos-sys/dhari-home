@@ -15,13 +15,12 @@ import {
   todayISO,
   updateStockMovement,
 } from '../lib/api'
-import { useAuth } from '../lib/auth'
 import { useLowStock } from '../lib/lowStock'
+import { compareDnoNumbers } from '../lib/dnoNumber'
 import type { DnoMaster, DnoSize, MovementType, StockMovement, StockRow } from '../types'
 import { SIZES, emptySizeQtyMap, errorMessage, type SizeQtyMap } from '../types'
 
 export function StockPage() {
-  const { isOwner } = useAuth()
   const { refresh: refreshLowStock } = useLowStock()
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
@@ -75,6 +74,18 @@ export function StockPage() {
     if (!lowOnly) return rows
     return rows.filter((r) => r.balance <= (r.dno.low_stock_threshold ?? 10))
   }, [rows, lowOnly])
+
+  const sortedLedger = useMemo(() => {
+    return [...ledger].sort((a, b) => {
+      const aNum = a.dno_master?.dno_number ?? ''
+      const bNum = b.dno_master?.dno_number ?? ''
+      const byDno = compareDnoNumbers(aNum, bNum)
+      if (byDno) return byDno
+      const byDate = (b.date || '').localeCompare(a.date || '')
+      if (byDate) return byDate
+      return b.id.localeCompare(a.id)
+    })
+  }, [ledger])
 
   function clearQuery() {
     setSearch({}, { replace: true })
@@ -224,7 +235,7 @@ export function StockPage() {
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md bg-ivory-dark">
+                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ivory-dark">
                             {r.dno.photo_url ? (
                               <img
                                 src={r.dno.photo_url}
@@ -238,18 +249,15 @@ export function StockPage() {
                             )}
                           </div>
                           <div className="min-w-0">
-                            {isOwner ? (
-                              <Link
-                                to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
-                                className="num font-medium text-indigo hover:underline"
-                              >
-                                {r.dno.dno_number}
-                              </Link>
-                            ) : (
-                              <div className="num font-medium text-indigo">
-                                {r.dno.dno_number}
-                              </div>
-                            )}
+                            <Link
+                              to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
+                              className="num font-medium text-indigo hover:underline"
+                            >
+                              {r.dno.dno_number}
+                            </Link>
+                            <div className="truncate text-xs text-ink">
+                              {r.dno.category || 'No system / quality'}
+                            </div>
                             <div className="text-xs text-muted">{r.size}</div>
                           </div>
                         </div>
@@ -287,10 +295,10 @@ export function StockPage() {
           Movement ledger
         </h2>
         <ul className="space-y-2">
-          {ledger.length === 0 ? (
+          {sortedLedger.length === 0 ? (
             <li className="text-sm text-muted">No movements yet.</li>
           ) : (
-            ledger.map((m) => (
+            sortedLedger.map((m) => (
               <li
                 key={m.id}
                 className="flex items-center justify-between gap-2 rounded-lg border border-[rgba(31,59,87,0.08)] bg-white/50 px-3 py-2"
@@ -298,6 +306,9 @@ export function StockPage() {
                 <div className="min-w-0">
                   <p className="num text-sm font-medium text-indigo">
                     {m.dno_master?.dno_number ?? m.dno_id.slice(0, 8)}
+                  </p>
+                  <p className="truncate text-xs text-ink">
+                    {dnos.find((d) => d.id === m.dno_id)?.category || '—'}
                   </p>
                   <p className="text-xs text-muted">
                     {m.size} · {m.date}

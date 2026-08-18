@@ -49,7 +49,7 @@ function AppRoutes() {
           <Route
             path="/dno"
             element={
-              <RoleGuard allow={['Owner']} fallback={home}>
+              <RoleGuard allow={['Owner', 'Warehouse']} fallback={home}>
                 <DnoPage />
               </RoleGuard>
             }
