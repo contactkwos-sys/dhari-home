@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { createDno, todayISO, updateDno, uploadDnoPhoto } from '../lib/api'
+import { photoUploadErrorMessage } from '../lib/compressImage'
 import type { DnoMaster, Manufacturer } from '../types'
 import { errorMessage } from '../types'
 
@@ -84,12 +85,24 @@ export function AddDesignForm({
         })
       }
 
+      let photoWarning: string | null = null
       if (photoFile) {
-        const url = await uploadDnoPhoto(saved.id, saved.dno_number, photoFile)
-        saved = { ...saved, photo_url: url }
+        try {
+          const url = await uploadDnoPhoto(saved.id, saved.dno_number, photoFile)
+          saved = { ...saved, photo_url: url }
+          setPhotoFile(null)
+        } catch (photoErr) {
+          photoWarning = photoUploadErrorMessage(photoErr)
+        }
       }
 
       await onSaved(saved)
+      if (photoWarning) {
+        setErr(
+          `${photoWarning}. Design details were saved — use Change photo to retry.`,
+        )
+        return
+      }
     } catch (error) {
       setErr(errorMessage(error, 'Save failed'))
     } finally {

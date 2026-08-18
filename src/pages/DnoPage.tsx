@@ -12,6 +12,7 @@ import {
   formatMoney,
   uploadDnoPhoto,
 } from '../lib/api'
+import { photoUploadErrorMessage } from '../lib/compressImage'
 import { enrichMovementsWithBalance } from '../lib/dashboard'
 import type {
   DnoMaster,
@@ -89,7 +90,7 @@ export function DnoPage() {
         prev && prev.id === dno.id ? { ...prev, photo_url: url } : prev,
       )
     } catch (e) {
-      setError(errorMessage(e, 'Upload failed'))
+      setError(photoUploadErrorMessage(e))
     } finally {
       setUploadingId(null)
     }

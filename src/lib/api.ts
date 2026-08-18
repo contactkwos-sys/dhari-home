@@ -1,4 +1,9 @@
 import { supabase } from './supabase'
+import {
+  compressImageFile,
+  isPhotoUploadError,
+  PhotoTooLargeError,
+} from './compressImage'
 import type {
   AppRole,
   DnoMaster,
@@ -128,12 +133,27 @@ export async function uploadDnoPhoto(
   dnoNumber: string,
   file: File,
 ): Promise<string> {
-  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-  const path = `${dnoNumber}/${Date.now()}.${ext}`
+  let toUpload: File
+  try {
+    toUpload = await compressImageFile(file)
+  } catch (e) {
+    if (e instanceof PhotoTooLargeError) throw e
+    // Compression failed unexpectedly — try original if within limit
+    if (file.size > 10 * 1024 * 1024) throw new PhotoTooLargeError()
+    toUpload = file
+  }
+
+  const path = `${dnoNumber}/${Date.now()}.jpg`
   const { error: uploadError } = await supabase.storage
     .from('dno-photos')
-    .upload(path, file, { upsert: true, contentType: file.type })
-  if (uploadError) throw uploadError
+    .upload(path, toUpload, {
+      upsert: true,
+      contentType: toUpload.type || 'image/jpeg',
+    })
+  if (uploadError) {
+    if (isPhotoUploadError(uploadError)) throw new PhotoTooLargeError()
+    throw uploadError
+  }
 
   const { data } = supabase.storage.from('dno-photos').getPublicUrl(path)
   const photo_url = data.publicUrl
