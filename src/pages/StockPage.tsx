@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AddDesignForm } from '../components/AddDesignForm'
+import { DesignFullView } from '../components/DesignFullView'
 import { DnoPicker } from '../components/DnoPicker'
 import { PageHeader } from '../components/PageHeader'
 import { SizePiecesFields } from '../components/SizePiecesFields'
@@ -32,6 +33,11 @@ export function StockPage() {
   const [showForm, setShowForm] = useState(false)
   const [showDesign, setShowDesign] = useState(false)
   const [editing, setEditing] = useState<StockMovement | null>(null)
+  const [viewing, setViewing] = useState<{
+    dno: DnoMaster
+    size: DnoSize
+    balance: number
+  } | null>(null)
   const lowOnly = search.get('low') === '1'
 
   useEffect(() => {
@@ -235,10 +241,17 @@ export function StockPage() {
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <Link
-                            to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
-                            className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ivory-dark"
-                            aria-label={`Open design ${r.dno.dno_number}`}
+                          <button
+                            type="button"
+                            className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ivory-dark ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-turmeric"
+                            aria-label={`View design ${r.dno.dno_number}`}
+                            onClick={() =>
+                              setViewing({
+                                dno: r.dno,
+                                size: r.size,
+                                balance: r.balance,
+                              })
+                            }
                           >
                             {r.dno.photo_url ? (
                               <img
@@ -251,14 +264,21 @@ export function StockPage() {
                                 —
                               </span>
                             )}
-                          </Link>
+                          </button>
                           <div className="min-w-0">
-                            <Link
-                              to={`/dno?id=${encodeURIComponent(r.dno.id)}`}
+                            <button
+                              type="button"
                               className="num font-medium text-indigo hover:underline"
+                              onClick={() =>
+                                setViewing({
+                                  dno: r.dno,
+                                  size: r.size,
+                                  balance: r.balance,
+                                })
+                              }
                             >
                               {r.dno.dno_number}
-                            </Link>
+                            </button>
                             <div className="truncate text-xs text-ink">
                               {r.dno.category || 'No system / quality'}
                             </div>
@@ -364,6 +384,15 @@ export function StockPage() {
           )}
         </ul>
       </section>
+
+      {viewing ? (
+        <DesignFullView
+          dno={viewing.dno}
+          size={viewing.size}
+          balance={viewing.balance}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
     </div>
   )
 }
