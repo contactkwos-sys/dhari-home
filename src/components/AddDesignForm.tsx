@@ -45,7 +45,10 @@ export function AddDesignForm({
   initial?: DnoMaster | null
   existingDnos?: DnoMaster[]
   onCancel: () => void
-  onSaved: (dno: DnoMaster, opts?: { addNext: boolean }) => Promise<void> | void
+  onSaved: (
+    dno: DnoMaster,
+    opts?: { addNext?: boolean; warning?: string | null },
+  ) => Promise<void> | void
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const extraSystems = useMemo(
@@ -207,18 +210,19 @@ export function AddDesignForm({
       }
 
       const warnings = [photoWarning, stockWarning].filter(Boolean)
-      await onSaved(saved, { addNext })
-      if (warnings.length) {
-        setErr(
-          `${warnings.join(' ')}. Design saved — retry photo or add stock in Warehouse.`,
-        )
-        if (addNext && !initial) resetForNext(saved)
+      const warningText = warnings.length
+        ? `${warnings.join(' ')}. Design saved — retry photo or add stock in Warehouse.`
+        : null
+
+      if (addNext && !initial) {
+        await onSaved(saved, { addNext: true, warning: warningText })
+        if (warningText) setErr(warningText)
+        else setOk(`Saved ${saved.dno_number}. Next DN ready.`)
+        resetForNext(saved)
         return
       }
-      if (addNext && !initial) {
-        setOk(`Saved ${saved.dno_number}. Next DN ready.`)
-        resetForNext(saved)
-      }
+
+      await onSaved(saved, { addNext: false, warning: warningText })
     } catch (error) {
       setErr(errorMessage(error, 'Save failed'))
     } finally {

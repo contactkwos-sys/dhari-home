@@ -241,6 +241,9 @@ export function DnoPage() {
             setEditing(null)
             clearQuery()
             await load()
+            if (opts?.warning) {
+              setError(opts.warning)
+            }
           }}
         />
       )}

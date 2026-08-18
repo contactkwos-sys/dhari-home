@@ -172,6 +172,9 @@ export function StockPage() {
             setShowDesign(false)
             clearQuery()
             await load()
+            if (opts?.warning) {
+              setError(opts.warning)
+            }
           }}
         />
       ) : null}
