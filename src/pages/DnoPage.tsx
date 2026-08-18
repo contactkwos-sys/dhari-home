@@ -5,6 +5,8 @@ import { PageHeader } from '../components/PageHeader'
 import { StripeBar } from '../components/StripeBar'
 import {
   createDno,
+  clearDnoPhoto,
+  deleteDno,
   fetchDnos,
   fetchOrders,
   fetchStockMovements,
@@ -97,6 +99,41 @@ export function DnoPage() {
     }
   }
 
+  async function onClearPhoto(dno: DnoMaster) {
+    if (!dno.photo_url) return
+    if (!window.confirm(`Remove photo for ${dno.dno_number}?`)) return
+    setError(null)
+    try {
+      const updated = await clearDnoPhoto(dno.id)
+      setRows((prev) => prev.map((r) => (r.id === dno.id ? updated : r)))
+      setDetail((prev) => (prev && prev.id === dno.id ? updated : prev))
+    } catch (e) {
+      setError(errorMessage(e, 'Could not remove photo'))
+    }
+  }
+
+  async function onDeleteDno(dno: DnoMaster) {
+    if (
+      !window.confirm(
+        `Delete ${dno.dno_number}? Related stock movements will also be removed.`,
+      )
+    ) {
+      return
+    }
+    setError(null)
+    try {
+      await deleteDno(dno.id)
+      setRows((prev) => prev.filter((r) => r.id !== dno.id))
+      if (detail?.id === dno.id) {
+        setDetail(null)
+        clearQuery()
+      }
+      if (editing?.id === dno.id) setEditing(null)
+    } catch (e) {
+      setError(errorMessage(e, 'Delete failed'))
+    }
+  }
+
   if (detail && !showAdd && !editing) {
     return (
       <DnoDetail
@@ -110,7 +147,9 @@ export function DnoPage() {
           setEditing(detail)
           setShowAdd(false)
         }}
+        onDelete={() => void onDeleteDno(detail)}
         onPhoto={() => fileRefs.current[detail.id]?.click()}
+        onClearPhoto={() => void onClearPhoto(detail)}
         fileInput={
           <input
             ref={(el) => {
@@ -172,58 +211,103 @@ export function DnoPage() {
 
       <ul className="mt-2 space-y-3">
         {rows.map((dno) => (
-          <li key={dno.id}>
+          <li key={dno.id} className="panel panel-accent flex gap-3">
             <button
               type="button"
-              className="panel panel-accent flex w-full gap-3 text-left"
-              onClick={() => {
-                setDetail(dno)
-                setSearch({ id: dno.id }, { replace: true })
-              }}
+              className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark"
+              onClick={() => fileRefs.current[dno.id]?.click()}
+              aria-label={`Change photo for ${dno.dno_number}`}
             >
-              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">
-                {dno.photo_url ? (
-                  <img
-                    src={dno.photo_url}
-                    alt={dno.dno_number}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center px-1 text-center text-[0.65rem] text-muted">
-                    No photo
-                  </span>
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="num font-medium text-indigo">{dno.dno_number}</p>
-                  <span className="text-xs font-medium text-turmeric">View</span>
-                </div>
-                <p className="mt-0.5 truncate text-sm text-muted">
-                  {dno.manufacturer === 'Other'
-                    ? dno.other_manufacturer_name || 'Other'
-                    : dno.manufacturer}
-                </p>
-                {dno.category ? (
-                  <p className="text-xs text-ink">{dno.category}</p>
-                ) : null}
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
-                  <span>
-                    Rate{' '}
-                    <span className="num text-ink">
-                      {formatMoney(dno.purchase_rate)}
-                    </span>
-                  </span>
-                  <span>
-                    Alert{' '}
-                    <span className="num text-ink">
-                      ≤{dno.low_stock_threshold ?? 10}
-                    </span>
-                  </span>
-                </div>
-              </div>
+              {dno.photo_url ? (
+                <img
+                  src={dno.photo_url}
+                  alt={dno.dno_number}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center px-1 text-center text-[0.65rem] text-muted">
+                  No photo
+                </span>
+              )}
             </button>
+            <input
+              ref={(el) => {
+                fileRefs.current[dno.id] = el
+              }}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void onPhotoPick(dno, e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <button
+                  type="button"
+                  className="num font-medium text-indigo hover:underline"
+                  onClick={() => {
+                    setDetail(dno)
+                    setSearch({ id: dno.id }, { replace: true })
+                  }}
+                >
+                  {dno.dno_number}
+                </button>
+                <div className="flex shrink-0 gap-3">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-turmeric"
+                    onClick={() => {
+                      setEditing(dno)
+                      setShowAdd(false)
+                      setDetail(null)
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-[#9b2c2c]"
+                    onClick={() => void onDeleteDno(dno)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <p className="mt-0.5 truncate text-sm text-muted">
+                {dno.manufacturer === 'Other'
+                  ? dno.other_manufacturer_name || 'Other'
+                  : dno.manufacturer}
+              </p>
+              {dno.category ? (
+                <p className="text-xs text-ink">{dno.category}</p>
+              ) : null}
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
+                <span>
+                  Rate{' '}
+                  <span className="num text-ink">
+                    {formatMoney(dno.purchase_rate)}
+                  </span>
+                </span>
+                <span>
+                  Alert{' '}
+                  <span className="num text-ink">
+                    ≤{dno.low_stock_threshold ?? 10}
+                  </span>
+                </span>
+                {dno.photo_url ? (
+                  <button
+                    type="button"
+                    className="font-medium text-[#9b2c2c]"
+                    onClick={() => void onClearPhoto(dno)}
+                  >
+                    Remove photo
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </li>
         ))}
       </ul>
@@ -236,14 +320,18 @@ function DnoDetail({
   uploading,
   onBack,
   onEdit,
+  onDelete,
   onPhoto,
+  onClearPhoto,
   fileInput,
 }: {
   dno: DnoMaster
   uploading: boolean
   onBack: () => void
   onEdit: () => void
+  onDelete: () => void
   onPhoto: () => void
+  onClearPhoto: () => void
   fileInput: ReactNode
 }) {
   const [tab, setTab] = useState<'ledger' | 'orders'>('ledger')
@@ -315,13 +403,22 @@ function DnoDetail({
 
   return (
     <div className="page animate-[rise-in_280ms_ease-out]">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" className="btn btn-ghost text-sm" onClick={onBack}>
           ← Back
         </button>
-        <button type="button" className="btn btn-primary text-sm" onClick={onEdit}>
-          Edit
-        </button>
+        <div className="flex gap-2">
+          <button type="button" className="btn btn-primary text-sm" onClick={onEdit}>
+            Edit
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost text-sm text-[#9b2c2c]"
+            onClick={onDelete}
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
       <article className="panel panel-accent overflow-hidden !p-0">
@@ -349,6 +446,17 @@ function DnoDetail({
           ) : null}
         </button>
         {fileInput}
+        {dno.photo_url ? (
+          <div className="flex justify-end border-b border-[rgba(31,59,87,0.08)] px-4 py-2">
+            <button
+              type="button"
+              className="text-xs font-medium text-[#9b2c2c]"
+              onClick={onClearPhoto}
+            >
+              Remove photo
+            </button>
+          </div>
+        ) : null}
 
         <div className="space-y-4 px-4 py-4">
           <div>
