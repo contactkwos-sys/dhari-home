@@ -331,6 +331,11 @@
     box-shadow: 0 0 0 3px rgba(201, 138, 44, 0.18);
   }
 
+  .field select optgroup {
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+
   .num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;

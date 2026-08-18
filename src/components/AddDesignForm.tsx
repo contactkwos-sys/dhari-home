@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   addStockInForSizes,
   createDno,
@@ -9,9 +9,12 @@ import {
 } from '../lib/api'
 import { photoUploadErrorMessage } from '../lib/compressImage'
 import { nextAfterDnoNumber, normalizeDnoNumber, suggestNextDnoNumber } from '../lib/dnoNumber'
-import type { DesignSystem, DnoMaster, DnoSize, Manufacturer } from '../types'
+import type { DnoMaster, DnoSize, Manufacturer } from '../types'
 import {
-  DESIGN_SYSTEMS,
+  DESIGN_QUALITY_PRESETS,
+  DESIGN_SYSTEM_OPTIONS,
+  extraDesignSystems,
+  matchDesignSystem,
   SIZES,
   emptySizeQtyMap,
   errorMessage,
@@ -22,15 +25,15 @@ import { SizePiecesFields } from './SizePiecesFields'
 function systemFromCategory(
   category: string | null | undefined,
   isNew: boolean,
+  extras: readonly string[],
 ): {
-  system: DesignSystem | 'Other' | ''
+  system: string
   other: string
 } {
-  if (category && (DESIGN_SYSTEMS as string[]).includes(category)) {
-    return { system: category as DesignSystem, other: '' }
-  }
-  if (category?.trim()) return { system: 'Other', other: category }
-  return { system: isNew ? 'Drop-up' : '', other: '' }
+  const known = matchDesignSystem(category, extras)
+  if (known) return { system: known, other: '' }
+  if (category?.trim()) return { system: 'Other', other: category.trim() }
+  return { system: isNew ? '5 foot' : '', other: '' }
 }
 
 export function AddDesignForm({
@@ -45,7 +48,15 @@ export function AddDesignForm({
   onSaved: (dno: DnoMaster, opts?: { addNext: boolean }) => Promise<void> | void
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
-  const initialSystem = systemFromCategory(initial?.category, !initial)
+  const extraSystems = useMemo(
+    () => extraDesignSystems(existingDnos),
+    [existingDnos],
+  )
+  const initialSystem = systemFromCategory(
+    initial?.category,
+    !initial,
+    extraSystems,
+  )
   const [dno_number, setDnoNumber] = useState(
     initial?.dno_number ?? suggestNextDnoNumber(existingDnos),
   )
@@ -58,9 +69,7 @@ export function AddDesignForm({
   const [purchase_rate, setPurchaseRate] = useState(
     initial?.purchase_rate?.toString() ?? '',
   )
-  const [system, setSystem] = useState<DesignSystem | 'Other' | ''>(
-    initialSystem.system,
-  )
+  const [system, setSystem] = useState(initialSystem.system)
   const [other_system, setOtherSystem] = useState(initialSystem.other)
   const [hsn_code, setHsn] = useState(initial?.hsn_code ?? '6304')
   const [gst_rate, setGst] = useState(initial?.gst_rate?.toString() ?? '12')
@@ -109,6 +118,14 @@ export function AddDesignForm({
     setPurchaseRate('')
     setDate(todayISO())
     if (fileRef.current) fileRef.current.value = ''
+    const extras = extraDesignSystems(
+      existingDnos.some((d) => d.id === saved.id)
+        ? existingDnos
+        : [...existingDnos, saved],
+    )
+    const next = systemFromCategory(saved.category, true, extras)
+    setSystem(next.system)
+    setOtherSystem(next.other)
   }
 
   async function submit(e: { preventDefault: () => void }, addNext: boolean) {
@@ -127,7 +144,23 @@ export function AddDesignForm({
       for (const size of SIZES) {
         pieces[size] = parsePieceCount(qtyBySize[size], size)
       }
+      const nextNumber = normalizeDnoNumber(dno_number)
+      if (!nextNumber) throw new Error('DN number is required')
+      const clash = existingDnos.find(
+        (d) =>
+          d.id !== initial?.id &&
+          normalizeDnoNumber(d.dno_number).toLowerCase() ===
+            nextNumber.toLowerCase(),
+      )
+      if (clash) {
+        throw new Error(
+          initial
+            ? 'This DN number is already used by another design.'
+            : 'This DN already exists. Open Warehouse → Add stock to add more pieces to the same DN.',
+        )
+      }
       const fields = {
+        dno_number: nextNumber,
         manufacturer,
         other_manufacturer_name:
           manufacturer === 'Other' ? other_manufacturer_name.trim() || null : null,
@@ -143,10 +176,7 @@ export function AddDesignForm({
       if (initial) {
         saved = await updateDno(initial.id, fields)
       } else {
-        saved = await createDno({
-          dno_number: normalizeDnoNumber(dno_number),
-          ...fields,
-        })
+        saved = await createDno(fields)
       }
 
       let photoWarning: string | null = null
@@ -205,8 +235,8 @@ export function AddDesignForm({
         {initial ? `Edit ${initial.dno_number}` : 'Add design'}
       </h2>
       <p className="text-xs text-muted">
-        Short DN — DN-1 to DN-21, or DN 1001 for DH. Same DN again: Warehouse →
-        Add stock.
+        Short DN — DN-1 to DN-21, or DN 1001. Same DN again: Warehouse → Add
+        stock. New quality names typed under Others stay in the list.
       </p>
       {ok ? <p className="ok text-sm">{ok}</p> : null}
 
@@ -272,40 +302,55 @@ export function AddDesignForm({
             value={dno_number}
             onChange={(e) => setDnoNumber(e.target.value)}
             className="num"
-            disabled={!!initial}
             placeholder="DN-1 or DN 1001"
             autoCapitalize="characters"
           />
         </div>
         <div className="field col-span-2">
-          <label htmlFor="system">System</label>
+          <label htmlFor="system">System / quality</label>
           <select
             id="system"
             value={system}
-            onChange={(e) =>
-              setSystem(e.target.value as DesignSystem | 'Other' | '')
-            }
+            onChange={(e) => setSystem(e.target.value)}
           >
             {initial && !initial.category ? (
               <option value="">—</option>
             ) : null}
-            {DESIGN_SYSTEMS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-            <option value="Other">Other</option>
+            <optgroup label="System">
+              {DESIGN_SYSTEM_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Quality">
+              {DESIGN_QUALITY_PRESETS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+              {extraSystems.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </optgroup>
+            <option value="Other">Others</option>
           </select>
         </div>
         {system === 'Other' ? (
           <div className="field col-span-2">
-            <label htmlFor="other_system">Other system</label>
+            <label htmlFor="other_system">Quality name</label>
             <input
               id="other_system"
               value={other_system}
               onChange={(e) => setOtherSystem(e.target.value)}
               required
+              placeholder="e.g. Cotton Dhari"
             />
+            <p className="mt-1 text-xs text-muted">
+              Saved names appear under Quality next time you add or edit a DN.
+            </p>
           </div>
         ) : null}
         <div className="field col-span-2">
