@@ -11,7 +11,7 @@ export function AddDesignForm({
 }: {
   initial?: DnoMaster | null
   onCancel: () => void
-  onSaved: (dno: DnoMaster) => Promise<void> | void
+  onSaved: (dno: DnoMaster, photoWarning?: string | null) => Promise<void> | void
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [dno_number, setDnoNumber] = useState(initial?.dno_number ?? '')
@@ -96,11 +96,9 @@ export function AddDesignForm({
         }
       }
 
-      await onSaved(saved)
+      await onSaved(saved, photoWarning)
       if (photoWarning) {
-        setErr(
-          `${photoWarning}. Design details were saved — use Change photo to retry.`,
-        )
+        // Parent closes the form; warning is shown on the DNO list.
         return
       }
     } catch (error) {

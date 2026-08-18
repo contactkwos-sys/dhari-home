@@ -143,10 +143,15 @@ export function StockPage() {
             setShowDesign(false)
             clearQuery()
           }}
-          onSaved={async () => {
+          onSaved={async (_dno, photoWarning) => {
             setShowDesign(false)
             clearQuery()
             await load()
+            if (photoWarning) {
+              setError(
+                `${photoWarning}. Design was saved — open DNO Master to retry the photo.`,
+              )
+            }
           }}
         />
       ) : null}

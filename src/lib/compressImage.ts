@@ -1,22 +1,21 @@
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+const TARGET_MAX_BYTES = 2.5 * 1024 * 1024
+
 /**
  * Resize/compress an image in the browser before upload.
- * Max edge ~1600px, JPEG quality ~0.8. Falls back to original if
- * the browser cannot decode the file (e.g. some HEIC cases).
+ * Max edge ~1600px, JPEG quality starting at ~0.8. Falls back to original
+ * if the browser cannot decode the file (e.g. some HEIC cases) and it fits.
  */
 export async function compressImageFile(
   file: File,
   options?: { maxDimension?: number; quality?: number },
 ): Promise<File> {
   const maxDimension = options?.maxDimension ?? 1600
-  const quality = options?.quality ?? 0.8
+  const startQuality = options?.quality ?? 0.8
 
-  let bitmap: ImageBitmap
-  try {
-    bitmap = await createImageBitmap(file)
-  } catch {
-    if (file.size > 10 * 1024 * 1024) {
-      throw new PhotoTooLargeError()
-    }
+  const bitmap = await decodeToBitmap(file)
+  if (!bitmap) {
+    if (file.size > MAX_UPLOAD_BYTES) throw new PhotoTooLargeError()
     return file
   }
 
@@ -31,34 +30,69 @@ export async function compressImageFile(
   const ctx = canvas.getContext('2d')
   if (!ctx) {
     bitmap.close()
+    if (file.size > MAX_UPLOAD_BYTES) throw new PhotoTooLargeError()
     return file
   }
 
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, targetW, targetH)
   ctx.drawImage(bitmap, 0, 0, targetW, targetH)
   bitmap.close()
 
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((b) => resolve(b), 'image/jpeg', quality)
-  })
+  let quality = startQuality
+  let blob = await canvasToJpeg(canvas, quality)
+  while (blob && blob.size > TARGET_MAX_BYTES && quality > 0.45) {
+    quality = Math.max(0.45, quality - 0.15)
+    blob = await canvasToJpeg(canvas, quality)
+  }
 
   if (!blob) {
-    if (file.size > 10 * 1024 * 1024) throw new PhotoTooLargeError()
+    if (file.size > MAX_UPLOAD_BYTES) throw new PhotoTooLargeError()
     return file
   }
 
-  // Prefer compressed when smaller; otherwise keep original if it fits
-  if (blob.size >= file.size && file.size <= 10 * 1024 * 1024) {
-    return file
-  }
+  if (blob.size > MAX_UPLOAD_BYTES) throw new PhotoTooLargeError()
 
-  if (blob.size > 10 * 1024 * 1024) {
-    throw new PhotoTooLargeError()
+  // Keep original only if it is already smaller and within the limit
+  if (blob.size >= file.size && file.size <= MAX_UPLOAD_BYTES) {
+    return file
   }
 
   const base = file.name.replace(/\.[^.]+$/, '') || 'photo'
   return new File([blob], `${base}.jpg`, {
     type: 'image/jpeg',
     lastModified: Date.now(),
+  })
+}
+
+async function decodeToBitmap(file: File): Promise<ImageBitmap | null> {
+  try {
+    return await createImageBitmap(file, {
+      imageOrientation: 'from-image',
+    } as ImageBitmapOptions)
+  } catch {
+    /* try HTMLImageElement fallback below */
+  }
+
+  try {
+    const url = URL.createObjectURL(file)
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('decode failed'))
+      el.src = url
+    })
+    const bitmap = await createImageBitmap(img)
+    URL.revokeObjectURL(url)
+    return bitmap
+  } catch {
+    return null
+  }
+}
+
+function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((b) => resolve(b), 'image/jpeg', quality)
   })
 }
 
@@ -85,7 +119,9 @@ export function isPhotoUploadError(error: unknown): boolean {
 export function photoUploadErrorMessage(error: unknown): string {
   if (isPhotoUploadError(error)) return 'Photo too large, try again'
   const msg = errorMessageLoose(error)
-  return msg || 'Photo upload failed — you can save without a photo and retry later'
+  return msg
+    ? `Photo upload failed — ${msg}. You can retry later via Change photo.`
+    : 'Photo upload failed — you can save without a photo and retry later via Change photo'
 }
 
 function errorMessageLoose(error: unknown): string {

@@ -197,11 +197,16 @@ export function DnoPage() {
             setEditing(null)
             clearQuery()
           }}
-          onSaved={async () => {
+          onSaved={async (_dno, photoWarning) => {
             setShowAdd(false)
             setEditing(null)
             clearQuery()
             await load()
+            if (photoWarning) {
+              setError(
+                `${photoWarning}. Design was saved — tap the photo to retry.`,
+              )
+            }
           }}
         />
       )}
