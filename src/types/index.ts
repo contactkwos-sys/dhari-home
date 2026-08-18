@@ -93,6 +93,12 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 
 export const SIZES: DnoSize[] = ['5ft x 4ft', '7ft x 4ft']
 
+export type SizeQtyMap = Record<DnoSize, string>
+
+export function emptySizeQtyMap(): SizeQtyMap {
+  return { '5ft x 4ft': '', '7ft x 4ft': '' }
+}
+
 export const APP_ROLES: AppRole[] = ['Owner', 'Warehouse']
 
 export const INDIAN_STATES = [

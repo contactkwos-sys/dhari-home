@@ -3,19 +3,21 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AddDesignForm } from '../components/AddDesignForm'
 import { PageHeader } from '../components/PageHeader'
+import { SizePiecesFields } from '../components/SizePiecesFields'
 import {
-  addStockIn,
+  addStockInForSizes,
   deleteStockMovement,
   fetchDnos,
   fetchStockMovements,
   fetchStockRows,
+  parsePieceCount,
   todayISO,
   updateStockMovement,
 } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useLowStock } from '../lib/lowStock'
 import type { DnoMaster, DnoSize, MovementType, StockMovement, StockRow } from '../types'
-import { SIZES, errorMessage } from '../types'
+import { SIZES, emptySizeQtyMap, errorMessage, type SizeQtyMap } from '../types'
 
 export function StockPage() {
   const { isOwner } = useAuth()
@@ -203,7 +205,7 @@ export function StockPage() {
                   <td colSpan={4} className="px-3 py-3 text-muted">
                     {lowOnly
                       ? 'No low-stock rows.'
-                      : 'No stock yet — use Add design, then Add stock.'}
+                      : 'No stock yet — add a design with pieces per size, or use Add stock.'}
                   </td>
                 </tr>
               ) : (
@@ -351,26 +353,32 @@ function AddStockForm({
   onAddDesign: () => void
 }) {
   const [dno_id, setDnoId] = useState(dnos[0]?.id ?? '')
-  const [size, setSize] = useState<DnoSize>('5ft x 4ft')
-  const [qty, setQty] = useState('')
+  const [qtyBySize, setQtyBySize] = useState<SizeQtyMap>(emptySizeQtyMap())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const selected = dnos.find((d) => d.id === dno_id)
+
+  function setSizeQty(size: DnoSize, value: string) {
+    setQtyBySize((prev) => ({ ...prev, [size]: value }))
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setErr(null)
     try {
-      const n = Number(qty)
-      if (!Number.isFinite(n) || n <= 0) {
-        throw new Error('Enter a quantity greater than 0')
+      const pieces: Partial<Record<DnoSize, number>> = {}
+      for (const size of SIZES) {
+        pieces[size] = parsePieceCount(qtyBySize[size], size)
       }
-      await addStockIn({
+      const total = SIZES.reduce((sum, size) => sum + (pieces[size] ?? 0), 0)
+      if (total <= 0) {
+        throw new Error('Enter pieces for at least one size (5ft x 4ft or 7ft x 4ft)')
+      }
+      await addStockInForSizes({
         dno_id,
-        size,
-        qty: n,
+        qtyBySize: pieces,
         date: todayISO(),
         note: 'Purchase / receipt',
       })
@@ -386,7 +394,8 @@ function AddStockForm({
     <form onSubmit={submit} className="panel panel-accent mb-4 space-y-3">
       <h2 className="font-display text-lg text-indigo">Add stock</h2>
       <p className="text-xs text-muted">
-        Adds an IN movement — balances accumulate per DNO + size.
+        Adds IN movements for this design — enter pieces for 5ft x 4ft and/or
+        7ft x 4ft. Balances show the same split on the stock report.
       </p>
       {dnos.length === 0 ? (
         <div className="rounded-lg bg-indigo/5 px-3 py-3 text-sm">
@@ -437,35 +446,12 @@ function AddStockForm({
               </div>
             ) : null}
           </div>
-          <div className="field">
-            <label htmlFor="mv_size">Size</label>
-            <select
-              id="mv_size"
-              required
-              value={size}
-              onChange={(e) => setSize(e.target.value as DnoSize)}
-            >
-              {SIZES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="mv_qty">Quantity</label>
-            <input
-              id="mv_qty"
-              type="number"
-              min="1"
-              step="1"
-              required
-              value={qty}
-              placeholder="Enter qty"
-              onChange={(e) => setQty(e.target.value)}
-              className="num"
-            />
-          </div>
+          <SizePiecesFields
+            idPrefix="add_stock_qty"
+            values={qtyBySize}
+            onChange={setSizeQty}
+            hint="Enter how many pieces for each size. Leave a size blank for 0."
+          />
         </div>
       )}
       {err ? <p className="err whitespace-pre-wrap">{err}</p> : null}
